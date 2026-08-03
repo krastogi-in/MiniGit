@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ parent_path }} - {{ repo_name }} - MiniGit{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Repositories</a> /
+    <a href="/repo/{{ repo_name }}">{{ repo_name }}</a> /
+    <strong>{{ parent_path or "root" }}</strong>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span>{{ parent_path or "root" }}</span>
+        <span class="hash">{{ tree_hash[:8] }}</span>
+    </div>
+    <div class="card-body">
+        {% for entry in entries|sort(attribute='name') %}
+        <div class="list-item">
+            {% if entry.type == "tree" %}
+            <span class="icon">&#128193;</span>
+            <a href="/repo/{{ repo_name }}/tree/{{ entry.hash }}?parent={{ parent_path }}/{{ entry.name }}">
+                {{ entry.name }}/
+            </a>
+            {% else %}
+            <span class="icon">&#128196;</span>
+            <a href="/repo/{{ repo_name }}/blob/{{ entry.hash }}?name={{ entry.name }}">
+                {{ entry.name }}
+            </a>
+            {% endif %}
+            <span class="hash" style="margin-left: auto;">{{ entry.hash[:8] }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

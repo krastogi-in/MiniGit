@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}History - {{ repo_name }} - MiniGit{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Repositories</a> /
+    <a href="/repo/{{ repo_name }}">{{ repo_name }}</a> /
+    <strong>History</strong>
+</div>
+
+<div style="display: flex; gap: 4px; margin-bottom: 16px;">
+    {% for b in branches %}
+    <a href="/repo/{{ repo_name }}/history?branch={{ b.name }}"
+       class="btn {% if b.name == branch %}btn-primary{% endif %}">
+        {{ b.name }}
+    </a>
+    {% endfor %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <span>{{ history|length }} commit{{ 's' if history|length != 1 }} on {{ branch }}</span>
+    </div>
+    <div class="card-body">
+        <div class="commit-graph">
+            {% for commit in history %}
+            <div class="commit-node">
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <a href="/repo/{{ repo_name }}/commit/{{ commit.hash }}">
+                        <strong>{{ commit.message }}</strong>
+                    </a>
+                    <a href="/repo/{{ repo_name }}/commit/{{ commit.hash }}" class="hash">
+                        {{ commit.hash[:8] }}
+                    </a>
+                </div>
+                <div class="meta">
+                    {{ commit.author }} &middot; {{ commit.timestamp }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

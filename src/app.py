@@ -1,0 +1,351 @@
+import os
+import sys
+import json
+import difflib
+
+sys.path.insert(0, os.path.dirname(__file__))
+
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from frontend.operations import Operations
+
+app = Flask(__name__)
+app.secret_key = "minigit-secret-key"
+
+REPOS_DIR = os.path.join(os.path.dirname(__file__), "..", "repos")
+os.makedirs(REPOS_DIR, exist_ok=True)
+
+REGISTRY_FILE = os.path.join(REPOS_DIR, "repos.json")
+
+
+def _load_registry():
+    """Load the repo registry: {name: absolute_path}"""
+    if os.path.isfile(REGISTRY_FILE):
+        with open(REGISTRY_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+
+def _save_registry(registry):
+    with open(REGISTRY_FILE, "w") as f:
+        json.dump(registry, f, indent=2)
+
+
+def _sync_registry():
+    """Merge legacy repos/ subdirs into the registry."""
+    registry = _load_registry()
+    for name in os.listdir(REPOS_DIR):
+        full = os.path.join(REPOS_DIR, name)
+        if os.path.isdir(os.path.join(full, ".minigit")) and name not in registry:
+            registry[name] = os.path.abspath(full)
+    _save_registry(registry)
+    return registry
+
+
+def get_ops_by_path(repo_path):
+    db_path = os.path.join(repo_path, ".minigit", "minigit.db")
+    return Operations(repo_path, db_path)
+
+
+def get_ops(repo_name):
+    registry = _load_registry()
+    if repo_name in registry:
+        return get_ops_by_path(registry[repo_name])
+    repo_path = os.path.join(REPOS_DIR, repo_name)
+    db_path = os.path.join(repo_path, ".minigit", "minigit.db")
+    return Operations(repo_path, db_path)
+
+
+@app.route("/")
+def index():
+    registry = _sync_registry()
+    repos = []
+    for name, path in sorted(registry.items()):
+        if not os.path.isdir(os.path.join(path, ".minigit")):
+            continue
+        ops = get_ops_by_path(path)
+        branches = ops.get_all_branches()
+        history = ops.get_commit_history()
+        repos.append({
+            "name": name,
+            "path": path,
+            "branches": len(branches),
+            "commits": len(history),
+            "last_commit": history[0] if history else None
+        })
+    return render_template("index.html", repos=repos)
+
+
+@app.route("/api/suggest-dirs")
+def suggest_dirs():
+    """Return directory suggestions for the given partial path."""
+    q = request.args.get("q", "").strip()
+    if not q:
+        q = os.path.expanduser("~")
+    q = os.path.expanduser(q)
+
+    if os.path.isdir(q):
+        parent = q
+        prefix = ""
+    else:
+        parent = os.path.dirname(q)
+        prefix = os.path.basename(q).lower()
+
+    if not os.path.isdir(parent):
+        return jsonify([])
+
+    results = []
+    try:
+        for name in sorted(os.listdir(parent)):
+            full = os.path.join(parent, name)
+            if not os.path.isdir(full):
+                continue
+            if name.startswith("."):
+                continue
+            if prefix and not name.lower().startswith(prefix):
+                continue
+            results.append(full)
+            if len(results) >= 15:
+                break
+    except PermissionError:
+        pass
+    return jsonify(results)
+
+
+@app.route("/new-repo", methods=["POST"])
+def new_repo():
+    dir_path = request.form.get("path", "").strip()
+    custom_name = request.form.get("name", "").strip()
+
+    if dir_path:
+        dir_path = os.path.expanduser(dir_path)
+        dir_path = os.path.abspath(dir_path)
+
+        if not os.path.isdir(dir_path):
+            flash(f"Directory does not exist: {dir_path}", "error")
+            return redirect(url_for("index"))
+
+        name = custom_name or os.path.basename(dir_path)
+        registry = _load_registry()
+        if name in registry:
+            flash(f"Repository '{name}' already registered", "error")
+            return redirect(url_for("index"))
+
+        ops = get_ops_by_path(dir_path)
+        if not os.path.isdir(os.path.join(dir_path, ".minigit")):
+            ops.init_repo(message="Initial commit")
+
+        registry[name] = dir_path
+        _save_registry(registry)
+        flash(f"Repository '{name}' added from {dir_path}", "success")
+        return redirect(url_for("repo_detail", repo_name=name))
+
+    if not custom_name:
+        flash("Enter a directory path or a new repository name", "error")
+        return redirect(url_for("index"))
+
+    name = custom_name
+    repo_path = os.path.join(REPOS_DIR, name)
+    if os.path.exists(repo_path):
+        flash(f"Repository '{name}' already exists", "error")
+        return redirect(url_for("index"))
+
+    os.makedirs(repo_path, exist_ok=True)
+    readme_path = os.path.join(repo_path, "README.md")
+    with open(readme_path, "w") as f:
+        f.write(f"# {name}\n")
+
+    ops = get_ops_by_path(repo_path)
+    ops.init_repo(message="Initial commit")
+    registry = _load_registry()
+    registry[name] = os.path.abspath(repo_path)
+    _save_registry(registry)
+    flash(f"Repository '{name}' created", "success")
+    return redirect(url_for("repo_detail", repo_name=name))
+
+
+@app.route("/repo/<repo_name>")
+def repo_detail(repo_name):
+    ops = get_ops(repo_name)
+    branch = request.args.get("branch", "main")
+    branches = ops.get_all_branches()
+    history = ops.get_commit_history(branch)
+    latest = history[0] if history else None
+
+    tree_entries = []
+    if latest:
+        tree_entries = ops.browse_tree(latest["tree_hash"])
+
+    return render_template(
+        "repo_detail.html",
+        repo_name=repo_name,
+        branch=branch,
+        branches=branches,
+        latest_commit=latest,
+        tree_entries=tree_entries
+    )
+
+
+@app.route("/repo/<repo_name>/tree/<tree_hash>")
+def browse_tree(repo_name, tree_hash):
+    ops = get_ops(repo_name)
+    entries = ops.browse_tree(tree_hash)
+    parent = request.args.get("parent", "")
+    return render_template(
+        "browse_tree.html",
+        repo_name=repo_name,
+        tree_hash=tree_hash,
+        entries=entries,
+        parent_path=parent
+    )
+
+
+@app.route("/repo/<repo_name>/blob/<blob_hash>")
+def view_blob(repo_name, blob_hash):
+    ops = get_ops(repo_name)
+    content = ops.get_blob_content(blob_hash)
+    filename = request.args.get("name", "file")
+    return render_template(
+        "view_blob.html",
+        repo_name=repo_name,
+        blob_hash=blob_hash,
+        content=content,
+        filename=filename
+    )
+
+
+@app.route("/repo/<repo_name>/history")
+def commit_history(repo_name):
+    ops = get_ops(repo_name)
+    branch = request.args.get("branch", "main")
+    branches = ops.get_all_branches()
+    history = ops.get_commit_history(branch)
+    return render_template(
+        "commit_history.html",
+        repo_name=repo_name,
+        branch=branch,
+        branches=branches,
+        history=history
+    )
+
+
+@app.route("/repo/<repo_name>/commit/<commit_hash>")
+def commit_detail(repo_name, commit_hash):
+    ops = get_ops(repo_name)
+    commit_data = ops.get_commit(commit_hash)
+    if not commit_data:
+        flash("Commit not found", "error")
+        return redirect(url_for("repo_detail", repo_name=repo_name))
+
+    diffs = []
+    if commit_data["parent_hash"]:
+        diffs = ops.get_diffs(commit_data["parent_hash"], commit_hash)
+        for d in diffs:
+            d["diff_lines"] = list(difflib.unified_diff(
+                d["old_content"].splitlines(keepends=True),
+                d["new_content"].splitlines(keepends=True),
+                fromfile=f"a/{d['path']}",
+                tofile=f"b/{d['path']}",
+                lineterm=""
+            ))
+    else:
+        tree_files = ops._flatten_tree(commit_data["tree_hash"])
+        for path, blob_hash in sorted(tree_files.items()):
+            content = ops.get_blob_content(blob_hash) or ""
+            diff_lines = [f"+{line}" for line in content.splitlines()]
+            diffs.append({
+                "path": path,
+                "status": "added",
+                "diff_lines": ["--- /dev/null",
+                               f"+++ b/{path}"] + diff_lines
+            })
+
+    return render_template(
+        "commit_detail.html",
+        repo_name=repo_name,
+        commit=commit_data,
+        diffs=diffs
+    )
+
+
+@app.route("/repo/<repo_name>/new-branch", methods=["POST"])
+def new_branch(repo_name):
+    ops = get_ops(repo_name)
+    branch_name = request.form.get("name", "").strip()
+    try:
+        ops.create_branch(branch_name)
+        flash(f"Branch '{branch_name}' created", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("repo_detail", repo_name=repo_name))
+
+
+@app.route("/repo/<repo_name>/working-dir")
+def working_dir(repo_name):
+    ops = get_ops(repo_name)
+    subdir = request.args.get("path", "")
+    items = ops.get_working_dir_files(subdir)
+    staged = ops.get_staged()
+    staged_paths = {s["path"] for s in staged}
+    return render_template(
+        "working_dir.html",
+        repo_name=repo_name,
+        subdir=subdir,
+        items=items,
+        staged=staged,
+        staged_paths=staged_paths
+    )
+
+
+@app.route("/repo/<repo_name>/stage", methods=["POST"])
+def stage_file(repo_name):
+    ops = get_ops(repo_name)
+    file_path = request.form.get("path", "").strip()
+    subdir = request.form.get("subdir", "")
+    try:
+        ops.add(file_path)
+        flash(f"Staged: {file_path}", "success")
+    except (FileNotFoundError, ValueError) as e:
+        flash(str(e), "error")
+    return redirect(url_for("working_dir", repo_name=repo_name, path=subdir))
+
+
+@app.route("/repo/<repo_name>/unstage", methods=["POST"])
+def unstage_file(repo_name):
+    ops = get_ops(repo_name)
+    file_path = request.form.get("path", "").strip()
+    ops.db.cursor.execute(
+        "DELETE FROM staging WHERE path = ?", (file_path,))
+    ops.db.conn.commit()
+    flash(f"Unstaged: {file_path}", "success")
+    return redirect(url_for("working_dir", repo_name=repo_name))
+
+
+@app.route("/repo/<repo_name>/stage-delete", methods=["POST"])
+def stage_delete(repo_name):
+    ops = get_ops(repo_name)
+    file_path = request.form.get("path", "").strip()
+    try:
+        ops.delete_file(file_path)
+        flash(f"Staged for deletion: {file_path}", "success")
+    except (FileNotFoundError, ValueError) as e:
+        flash(str(e), "error")
+    return redirect(url_for("working_dir", repo_name=repo_name))
+
+
+@app.route("/repo/<repo_name>/commit", methods=["POST"])
+def create_commit(repo_name):
+    ops = get_ops(repo_name)
+    message = request.form.get("message", "").strip()
+    if not message:
+        flash("Commit message is required", "error")
+        return redirect(url_for("working_dir", repo_name=repo_name))
+    try:
+        commit_hash = ops.create_new_commit(message)
+        flash(f"Committed: {commit_hash[:8]}", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("repo_detail", repo_name=repo_name))
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)

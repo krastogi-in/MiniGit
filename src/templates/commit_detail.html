@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Commit {{ commit.hash[:8] }} - {{ repo_name }} - MiniGit{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Repositories</a> /
+    <a href="/repo/{{ repo_name }}">{{ repo_name }}</a> /
+    <a href="/repo/{{ repo_name }}/history">History</a> /
+    <strong>{{ commit.hash[:8] }}</strong>
+</div>
+
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">
+        <span>Commit</span>
+        <span class="hash">{{ commit.hash }}</span>
+    </div>
+    <div class="card-body padded">
+        <h3 style="margin-bottom: 8px;">{{ commit.message }}</h3>
+        <div class="meta">
+            {{ commit.author }} &middot; {{ commit.timestamp }}
+            {% if commit.parent_hash %}
+            &middot; parent:
+            <a href="/repo/{{ repo_name }}/commit/{{ commit.parent_hash }}" class="hash">
+                {{ commit.parent_hash[:8] }}
+            </a>
+            {% else %}
+            &middot; <em>initial commit</em>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if diffs %}
+<div class="card">
+    <div class="card-header">
+        {{ diffs|length }} file{{ 's' if diffs|length != 1 }} changed
+    </div>
+    <div class="card-body padded">
+        {% for d in diffs %}
+        <div class="diff-block">
+            <div class="diff-header">
+                <span class="badge {{ d.status }}">{{ d.status }}</span>
+                &nbsp; {{ d.path }}
+            </div>
+            {% for line in d.diff_lines %}
+            {% if line.startswith('+') and not line.startswith('+++') %}
+            <div class="diff-line add">{{ line }}</div>
+            {% elif line.startswith('-') and not line.startswith('---') %}
+            <div class="diff-line del">{{ line }}</div>
+            {% elif line.startswith('@@') %}
+            <div class="diff-line hunk">{{ line }}</div>
+            {% else %}
+            <div class="diff-line">{{ line }}</div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body padded meta">No file changes to show.</div>
+</div>
+{% endif %}
+{% endblock %}

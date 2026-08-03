@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}MiniGit - Repositories{% endblock %}
+
+{% block content %}
+
+<!-- Add from existing directory -->
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">Add Existing Directory as Repository</div>
+    <div class="card-body padded">
+        <form action="/new-repo" method="POST" id="add-repo-form">
+            <div style="position: relative; margin-bottom: 12px;">
+                <label style="font-size: 13px; color: #8b949e; display: block; margin-bottom: 4px;">
+                    Directory path (start typing to see suggestions)
+                </label>
+                <input type="text" name="path" id="path-input"
+                       placeholder="e.g. /home/user/Projects/my-app"
+                       autocomplete="off"
+                       style="width: 100%; padding: 8px 12px; font-family: monospace;">
+                <div id="suggestions"
+                     style="position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
+                            background: #1c2128; border: 1px solid #30363d; border-top: none;
+                            border-radius: 0 0 6px 6px; max-height: 200px; overflow-y: auto;
+                            display: none;">
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: flex-end;">
+                <div style="flex: 1;">
+                    <label style="font-size: 13px; color: #8b949e; display: block; margin-bottom: 4px;">
+                        Repository name (optional, defaults to folder name)
+                    </label>
+                    <input type="text" name="name" id="name-input"
+                           placeholder="auto-detected from path"
+                           style="width: 100%; padding: 8px 12px;">
+                </div>
+                <button type="submit" class="btn btn-primary" style="padding: 8px 20px; white-space: nowrap;">
+                    + Add Repository
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Or create blank -->
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">Or Create a New Empty Repository</div>
+    <div class="card-body padded">
+        <form action="/new-repo" method="POST" class="inline-form" style="width: 100%;">
+            <input type="text" name="name" placeholder="New repository name" required style="flex: 1;">
+            <button type="submit" class="btn" style="padding: 8px 16px;">+ Create Empty</button>
+        </form>
+    </div>
+</div>
+
+<!-- Repo list -->
+<div class="card">
+    <div class="card-header">Your Repositories</div>
+    <div class="card-body">
+        {% if repos %}
+        {% for repo in repos %}
+        <div class="list-item">
+            <span class="icon">&#128193;</span>
+            <div style="flex: 1;">
+                <a href="/repo/{{ repo.name }}" style="font-weight: 600;">{{ repo.name }}</a>
+                <div class="meta" style="font-family: monospace; font-size: 12px;">
+                    {{ repo.path }}
+                </div>
+                <div class="meta">
+                    {{ repo.branches }} branch{{ 'es' if repo.branches != 1 }}
+                    &middot; {{ repo.commits }} commit{{ 's' if repo.commits != 1 }}
+                    {% if repo.last_commit %}
+                    &middot; last: "{{ repo.last_commit.message|truncate(40) }}"
+                    {% endif %}
+                </div>
+            </div>
+            <a href="/repo/{{ repo.name }}/working-dir" class="btn btn-primary" style="font-size: 12px; padding: 4px 10px;">
+                Add Files
+            </a>
+            <a href="/repo/{{ repo.name }}/history" class="btn" style="font-size: 12px; padding: 4px 10px;">
+                History
+            </a>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="list-item meta">No repositories yet. Add a directory or create one above.</div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+(function() {
+    const input = document.getElementById('path-input');
+    const nameInput = document.getElementById('name-input');
+    const box = document.getElementById('suggestions');
+    let debounce = null;
+
+    input.addEventListener('input', function() {
+        clearTimeout(debounce);
+        debounce = setTimeout(fetchSuggestions, 200);
+    });
+
+    input.addEventListener('focus', function() {
+        if (input.value) fetchSuggestions();
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!box.contains(e.target) && e.target !== input) {
+            box.style.display = 'none';
+        }
+    });
+
+    function fetchSuggestions() {
+        const q = input.value.trim();
+        fetch('/api/suggest-dirs?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(dirs => {
+                box.innerHTML = '';
+                if (dirs.length === 0) {
+                    box.style.display = 'none';
+                    return;
+                }
+                dirs.forEach(function(d) {
+                    const item = document.createElement('div');
+                    item.textContent = d;
+                    item.style.cssText = 'padding: 8px 12px; cursor: pointer; font-family: monospace; font-size: 13px; border-bottom: 1px solid #21262d;';
+                    item.addEventListener('mouseenter', function() {
+                        item.style.background = '#30363d';
+                    });
+                    item.addEventListener('mouseleave', function() {
+                        item.style.background = 'transparent';
+                    });
+                    item.addEventListener('click', function() {
+                        input.value = d + '/';
+                        box.style.display = 'none';
+                        const basename = d.split('/').pop();
+                        if (!nameInput.value) {
+                            nameInput.placeholder = basename;
+                        }
+                        input.focus();
+                        fetchSuggestions();
+                    });
+                    box.appendChild(item);
+                });
+                box.style.display = 'block';
+            });
+    }
+
+    input.addEventListener('change', function() {
+        const val = input.value.trim();
+        if (val) {
+            const parts = val.replace(/\/+$/, '').split('/');
+            const basename = parts[parts.length - 1];
+            if (!nameInput.value) {
+                nameInput.placeholder = basename;
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

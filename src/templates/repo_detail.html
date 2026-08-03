@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ repo_name }} - MiniGit{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Repositories</a> / <strong>{{ repo_name }}</strong>
+</div>
+
+<div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;">
+    <div style="display: flex; gap: 4px;">
+        {% for b in branches %}
+        <a href="/repo/{{ repo_name }}?branch={{ b.name }}"
+           class="btn {% if b.name == branch %}btn-primary{% endif %}">
+            {{ b.name }}
+        </a>
+        {% endfor %}
+    </div>
+
+    <a href="/repo/{{ repo_name }}/history?branch={{ branch }}" class="btn">History</a>
+    <a href="/repo/{{ repo_name }}/working-dir" class="btn btn-primary">Add / Remove Files</a>
+
+    <form action="/repo/{{ repo_name }}/new-branch" method="POST" class="inline-form" style="margin-left: auto;">
+        <input type="text" name="name" placeholder="New branch" required>
+        <button type="submit" class="btn">+ Branch</button>
+    </form>
+</div>
+
+{% if latest_commit %}
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">
+        <span>Latest commit</span>
+        <a href="/repo/{{ repo_name }}/commit/{{ latest_commit.hash }}" class="hash">
+            {{ latest_commit.hash[:8] }}
+        </a>
+    </div>
+    <div class="card-body padded">
+        <strong>{{ latest_commit.message }}</strong>
+        <div class="meta">
+            {{ latest_commit.author }} &middot; {{ latest_commit.timestamp }}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">Files</div>
+    <div class="card-body">
+        {% if tree_entries %}
+        {% for entry in tree_entries|sort(attribute='name') %}
+        <div class="list-item">
+            {% if entry.type == "tree" %}
+            <span class="icon">&#128193;</span>
+            <a href="/repo/{{ repo_name }}/tree/{{ entry.hash }}?parent={{ entry.name }}">
+                {{ entry.name }}/
+            </a>
+            {% else %}
+            <span class="icon">&#128196;</span>
+            <a href="/repo/{{ repo_name }}/blob/{{ entry.hash }}?name={{ entry.name }}">
+                {{ entry.name }}
+            </a>
+            {% endif %}
+            <span class="hash" style="margin-left: auto;">{{ entry.hash[:8] }}</span>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="list-item meta">Empty repository</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

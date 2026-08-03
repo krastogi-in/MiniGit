@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% block title %}Working Directory - {{ repo_name }} - MiniGit{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Repositories</a> /
+    <a href="/repo/{{ repo_name }}">{{ repo_name }}</a> /
+    <strong>Working Directory</strong>
+    {% if subdir %}
+     / {{ subdir }}
+    {% endif %}
+</div>
+
+<div class="card" style="margin-bottom: 16px; border-left: 3px solid #238636;">
+    <div class="card-body padded" style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 24px;">&#128193;</span>
+        <div>
+            <div style="font-size: 18px; font-weight: 700; color: #f0f6fc;">{{ repo_name }}</div>
+            <div class="meta">Browse files on disk, stage changes, and commit to this repository</div>
+        </div>
+        <a href="/repo/{{ repo_name }}" class="btn" style="margin-left: auto;">View Repo</a>
+    </div>
+</div>
+
+<div style="display: flex; gap: 16px; flex-wrap: wrap;">
+
+    <!-- LEFT: File explorer -->
+    <div style="flex: 1; min-width: 320px;">
+        <div class="card">
+            <div class="card-header">
+                <span>
+                    {% if subdir %}
+                    <a href="/repo/{{ repo_name }}/working-dir" style="color: #8b949e;">root</a>
+                    {% set parts = subdir.split('/') %}
+                    {% for part in parts %}
+                    / <a href="/repo/{{ repo_name }}/working-dir?path={{ '/'.join(parts[:loop.index]) }}"
+                         style="color: {% if loop.last %}#f0f6fc{% else %}#8b949e{% endif %};">
+                        {{ part }}
+                    </a>
+                    {% endfor %}
+                    {% else %}
+                    Files on disk
+                    {% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                {% if subdir %}
+                <a href="/repo/{{ repo_name }}/working-dir{% if '/' in subdir %}?path={{ subdir.rsplit('/', 1)[0] }}{% endif %}"
+                   style="text-decoration: none;">
+                    <div class="list-item">
+                        <span class="icon">&#8592;</span>
+                        <span style="color: #8b949e;">..</span>
+                    </div>
+                </a>
+                {% endif %}
+
+                {% if items %}
+                {% for item in items %}
+                <div class="list-item">
+                    {% if item.type == "dir" %}
+                    <span class="icon">&#128193;</span>
+                    <a href="/repo/{{ repo_name }}/working-dir?path={{ item.path }}">
+                        {{ item.name }}/
+                    </a>
+                    {% else %}
+                    <span class="icon">&#128196;</span>
+                    <span style="flex: 1;">{{ item.name }}</span>
+                    {% if item.path in staged_paths %}
+                    <span class="badge added">staged</span>
+                    <form action="/repo/{{ repo_name }}/unstage" method="POST" style="margin: 0;">
+                        <input type="hidden" name="path" value="{{ item.path }}">
+                        <button type="submit" class="btn" style="padding: 2px 8px; font-size: 12px;">Unstage</button>
+                    </form>
+                    {% else %}
+                    <form action="/repo/{{ repo_name }}/stage" method="POST" style="margin: 0;">
+                        <input type="hidden" name="path" value="{{ item.path }}">
+                        <input type="hidden" name="subdir" value="{{ subdir }}">
+                        <button type="submit" class="btn btn-primary" style="padding: 2px 8px; font-size: 12px;">+ Add</button>
+                    </form>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="list-item meta">Empty directory</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT: Staging area + commit -->
+    <div style="flex: 1; min-width: 320px;">
+        <div class="card" style="margin-bottom: 16px;">
+            <div class="card-header">
+                <span>Staged Changes</span>
+                <span class="badge">{{ staged|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if staged %}
+                {% for s in staged %}
+                <div class="list-item">
+                    <span class="badge {% if s.action == 'add' %}added{% else %}deleted{% endif %}"
+                          style="font-size: 11px;">{{ s.action }}</span>
+                    <span style="flex: 1; font-family: monospace; font-size: 13px;">{{ s.path }}</span>
+                    <form action="/repo/{{ repo_name }}/unstage" method="POST" style="margin: 0;">
+                        <input type="hidden" name="path" value="{{ s.path }}">
+                        <button type="submit" class="btn" style="padding: 2px 8px; font-size: 12px;">&times;</button>
+                    </form>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="list-item meta">
+                    No files staged. Use the file explorer to add files.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if staged %}
+        <div class="card">
+            <div class="card-header">Create Commit</div>
+            <div class="card-body padded">
+                <form action="/repo/{{ repo_name }}/commit" method="POST">
+                    <div style="margin-bottom: 12px;">
+                        <input type="text" name="message" placeholder="Commit message"
+                               required style="width: 100%; padding: 8px 12px;">
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        Commit {{ staged|length }} file{{ 's' if staged|length != 1 }}
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card" style="margin-top: 16px;">
+            <div class="card-header">Tracked File Actions</div>
+            <div class="card-body padded">
+                <form action="/repo/{{ repo_name }}/stage-delete" method="POST" class="inline-form">
+                    <input type="text" name="path" placeholder="File path to delete" required style="flex: 1;">
+                    <button type="submit" class="btn" style="background: #4a1c1c; border-color: #7a2c2c; color: #f8a0a0;">
+                        Delete
+                    </button>
+                </form>
+                <div class="meta" style="margin-top: 8px;">
+                    Enter the path of a tracked file to stage it for deletion (e.g. src/old.py)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div style="margin-top: 16px;">
+    <a href="/repo/{{ repo_name }}" class="btn">&larr; Back to repo</a>
+</div>
+{% endblock %}

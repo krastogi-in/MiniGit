@@ -1,3 +1,5 @@
+"""Pytest configuration — adds src/ to the import path."""
+
 import os
 import sys
 

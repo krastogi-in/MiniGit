@@ -1,0 +1,1 @@
+"""MiniGit source package."""

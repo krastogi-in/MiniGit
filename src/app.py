@@ -1,37 +1,47 @@
+"""MiniGit Flask web application — browse repositories, commits, trees, and diffs."""
+
+from __future__ import annotations
+
+import difflib
+import json
 import os
 import sys
-import json
-import difflib
+from typing import Any
+
+import structlog
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from frontend.operations import Operations
 
-app = Flask(__name__)
-app.secret_key = "minigit-secret-key"
+logger = structlog.get_logger(__name__)
 
-REPOS_DIR = os.path.join(os.path.dirname(__file__), "..", "repos")
+app = Flask(__name__)
+app.secret_key = os.environ.get("MINIGIT_SECRET_KEY", "minigit-secret-key")
+
+REPOS_DIR: str = os.path.join(os.path.dirname(__file__), "..", "repos")
 os.makedirs(REPOS_DIR, exist_ok=True)
 
-REGISTRY_FILE = os.path.join(REPOS_DIR, "repos.json")
+REGISTRY_FILE: str = os.path.join(REPOS_DIR, "repos.json")
 
 
-def _load_registry():
-    """Load the repo registry: {name: absolute_path}"""
+def _load_registry() -> dict[str, str]:
+    """Load the repo registry mapping names to absolute paths."""
     if os.path.isfile(REGISTRY_FILE):
         with open(REGISTRY_FILE, "r") as f:
             return json.load(f)
     return {}
 
 
-def _save_registry(registry):
+def _save_registry(registry: dict[str, str]) -> None:
+    """Persist the repo registry to disk."""
     with open(REGISTRY_FILE, "w") as f:
         json.dump(registry, f, indent=2)
 
 
-def _sync_registry():
-    """Merge legacy repos/ subdirs into the registry."""
+def _sync_registry() -> dict[str, str]:
+    """Merge legacy repos/ subdirectories into the registry."""
     registry = _load_registry()
     for name in os.listdir(REPOS_DIR):
         full = os.path.join(REPOS_DIR, name)
@@ -41,12 +51,14 @@ def _sync_registry():
     return registry
 
 
-def get_ops_by_path(repo_path):
+def get_ops_by_path(repo_path: str) -> Operations:
+    """Create an Operations instance from an absolute repo path."""
     db_path = os.path.join(repo_path, ".minigit", "minigit.db")
     return Operations(repo_path, db_path)
 
 
-def get_ops(repo_name):
+def get_ops(repo_name: str) -> Operations:
+    """Look up a repo by name in the registry and return Operations."""
     registry = _load_registry()
     if repo_name in registry:
         return get_ops_by_path(registry[repo_name])
@@ -56,9 +68,10 @@ def get_ops(repo_name):
 
 
 @app.route("/")
-def index():
+def index() -> str:
+    """Render the homepage listing all registered repositories."""
     registry = _sync_registry()
-    repos = []
+    repos: list[dict[str, Any]] = []
     for name, path in sorted(registry.items()):
         if not os.path.isdir(os.path.join(path, ".minigit")):
             continue
@@ -70,14 +83,14 @@ def index():
             "path": path,
             "branches": len(branches),
             "commits": len(history),
-            "last_commit": history[0] if history else None
+            "last_commit": history[0] if history else None,
         })
     return render_template("index.html", repos=repos)
 
 
 @app.route("/api/suggest-dirs")
-def suggest_dirs():
-    """Return directory suggestions for the given partial path."""
+def suggest_dirs() -> Any:
+    """Return JSON array of directory suggestions for autocomplete."""
     q = request.args.get("q", "").strip()
     if not q:
         q = os.path.expanduser("~")
@@ -93,7 +106,7 @@ def suggest_dirs():
     if not os.path.isdir(parent):
         return jsonify([])
 
-    results = []
+    results: list[str] = []
     try:
         for name in sorted(os.listdir(parent)):
             full = os.path.join(parent, name)
@@ -112,7 +125,8 @@ def suggest_dirs():
 
 
 @app.route("/new-repo", methods=["POST"])
-def new_repo():
+def new_repo() -> Any:
+    """Handle new repository creation or registration."""
     dir_path = request.form.get("path", "").strip()
     custom_name = request.form.get("name", "").strip()
 
@@ -136,6 +150,7 @@ def new_repo():
 
         registry[name] = dir_path
         _save_registry(registry)
+        logger.info("repo_registered", name=name, path=dir_path)
         flash(f"Repository '{name}' added from {dir_path}", "success")
         return redirect(url_for("repo_detail", repo_name=name))
 
@@ -159,19 +174,21 @@ def new_repo():
     registry = _load_registry()
     registry[name] = os.path.abspath(repo_path)
     _save_registry(registry)
+    logger.info("repo_created", name=name)
     flash(f"Repository '{name}' created", "success")
     return redirect(url_for("repo_detail", repo_name=name))
 
 
 @app.route("/repo/<repo_name>")
-def repo_detail(repo_name):
+def repo_detail(repo_name: str) -> str:
+    """Render the repository detail page with branch info and latest tree."""
     ops = get_ops(repo_name)
     branch = request.args.get("branch", "main")
     branches = ops.get_all_branches()
     history = ops.get_commit_history(branch)
     latest = history[0] if history else None
 
-    tree_entries = []
+    tree_entries: list[dict[str, str]] = []
     if latest:
         tree_entries = ops.browse_tree(latest["tree_hash"])
 
@@ -181,12 +198,13 @@ def repo_detail(repo_name):
         branch=branch,
         branches=branches,
         latest_commit=latest,
-        tree_entries=tree_entries
+        tree_entries=tree_entries,
     )
 
 
 @app.route("/repo/<repo_name>/tree/<tree_hash>")
-def browse_tree(repo_name, tree_hash):
+def browse_tree(repo_name: str, tree_hash: str) -> str:
+    """Render the tree browser showing entries at a given tree hash."""
     ops = get_ops(repo_name)
     entries = ops.browse_tree(tree_hash)
     parent = request.args.get("parent", "")
@@ -195,12 +213,13 @@ def browse_tree(repo_name, tree_hash):
         repo_name=repo_name,
         tree_hash=tree_hash,
         entries=entries,
-        parent_path=parent
+        parent_path=parent,
     )
 
 
 @app.route("/repo/<repo_name>/blob/<blob_hash>")
-def view_blob(repo_name, blob_hash):
+def view_blob(repo_name: str, blob_hash: str) -> str:
+    """Render the blob viewer showing file content."""
     ops = get_ops(repo_name)
     content = ops.get_blob_content(blob_hash)
     filename = request.args.get("name", "file")
@@ -209,12 +228,13 @@ def view_blob(repo_name, blob_hash):
         repo_name=repo_name,
         blob_hash=blob_hash,
         content=content,
-        filename=filename
+        filename=filename,
     )
 
 
 @app.route("/repo/<repo_name>/history")
-def commit_history(repo_name):
+def commit_history(repo_name: str) -> str:
+    """Render the commit history timeline for a branch."""
     ops = get_ops(repo_name)
     branch = request.args.get("branch", "main")
     branches = ops.get_all_branches()
@@ -224,19 +244,20 @@ def commit_history(repo_name):
         repo_name=repo_name,
         branch=branch,
         branches=branches,
-        history=history
+        history=history,
     )
 
 
 @app.route("/repo/<repo_name>/commit/<commit_hash>")
-def commit_detail(repo_name, commit_hash):
+def commit_detail(repo_name: str, commit_hash: str) -> str | Any:
+    """Render commit detail page with metadata and file diffs."""
     ops = get_ops(repo_name)
     commit_data = ops.get_commit(commit_hash)
     if not commit_data:
         flash("Commit not found", "error")
         return redirect(url_for("repo_detail", repo_name=repo_name))
 
-    diffs = []
+    diffs: list[dict[str, Any]] = []
     if commit_data["parent_hash"]:
         diffs = ops.get_diffs(commit_data["parent_hash"], commit_hash)
         for d in diffs:
@@ -245,7 +266,7 @@ def commit_detail(repo_name, commit_hash):
                 d["new_content"].splitlines(keepends=True),
                 fromfile=f"a/{d['path']}",
                 tofile=f"b/{d['path']}",
-                lineterm=""
+                lineterm="",
             ))
     else:
         tree_files = ops._flatten_tree(commit_data["tree_hash"])
@@ -255,20 +276,20 @@ def commit_detail(repo_name, commit_hash):
             diffs.append({
                 "path": path,
                 "status": "added",
-                "diff_lines": ["--- /dev/null",
-                               f"+++ b/{path}"] + diff_lines
+                "diff_lines": ["--- /dev/null", f"+++ b/{path}"] + diff_lines,
             })
 
     return render_template(
         "commit_detail.html",
         repo_name=repo_name,
         commit=commit_data,
-        diffs=diffs
+        diffs=diffs,
     )
 
 
 @app.route("/repo/<repo_name>/new-branch", methods=["POST"])
-def new_branch(repo_name):
+def new_branch(repo_name: str) -> Any:
+    """Handle branch creation form submission."""
     ops = get_ops(repo_name)
     branch_name = request.form.get("name", "").strip()
     try:
@@ -280,7 +301,8 @@ def new_branch(repo_name):
 
 
 @app.route("/repo/<repo_name>/working-dir")
-def working_dir(repo_name):
+def working_dir(repo_name: str) -> str:
+    """Render the working directory browser with staging status."""
     ops = get_ops(repo_name)
     subdir = request.args.get("path", "")
     items = ops.get_working_dir_files(subdir)
@@ -292,12 +314,13 @@ def working_dir(repo_name):
         subdir=subdir,
         items=items,
         staged=staged,
-        staged_paths=staged_paths
+        staged_paths=staged_paths,
     )
 
 
 @app.route("/repo/<repo_name>/stage", methods=["POST"])
-def stage_file(repo_name):
+def stage_file(repo_name: str) -> Any:
+    """Handle file staging form submission."""
     ops = get_ops(repo_name)
     file_path = request.form.get("path", "").strip()
     subdir = request.form.get("subdir", "")
@@ -310,18 +333,19 @@ def stage_file(repo_name):
 
 
 @app.route("/repo/<repo_name>/unstage", methods=["POST"])
-def unstage_file(repo_name):
+def unstage_file(repo_name: str) -> Any:
+    """Handle file unstaging form submission."""
     ops = get_ops(repo_name)
     file_path = request.form.get("path", "").strip()
-    ops.db.cursor.execute(
-        "DELETE FROM staging WHERE path = ?", (file_path,))
+    ops.db.cursor.execute("DELETE FROM staging WHERE path = ?", (file_path,))
     ops.db.conn.commit()
     flash(f"Unstaged: {file_path}", "success")
     return redirect(url_for("working_dir", repo_name=repo_name))
 
 
 @app.route("/repo/<repo_name>/stage-delete", methods=["POST"])
-def stage_delete(repo_name):
+def stage_delete(repo_name: str) -> Any:
+    """Handle file deletion staging form submission."""
     ops = get_ops(repo_name)
     file_path = request.form.get("path", "").strip()
     try:
@@ -333,7 +357,8 @@ def stage_delete(repo_name):
 
 
 @app.route("/repo/<repo_name>/commit", methods=["POST"])
-def create_commit(repo_name):
+def create_commit(repo_name: str) -> Any:
+    """Handle commit creation form submission."""
     ops = get_ops(repo_name)
     message = request.form.get("message", "").strip()
     if not message:

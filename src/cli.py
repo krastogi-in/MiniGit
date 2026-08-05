@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-MiniGit CLI -- a simplified git-like command-line interface.
+"""MiniGit CLI — a simplified git-like command-line interface.
 
 Usage:
     minigit init                        Initialize a new repository
@@ -15,18 +14,21 @@ Usage:
     minigit serve                       Start the web UI
 """
 
+from __future__ import annotations
+
 import argparse
 import difflib
 import os
 import sys
+from typing import Any
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 from frontend.operations import Operations
 
 
-def find_repo(start_path=None):
-    """Walk up from start_path to find a .minigit directory."""
+def find_repo(start_path: str | None = None) -> str | None:
+    """Walk up from start_path to find the nearest .minigit directory."""
     path = os.path.abspath(start_path or os.getcwd())
     while True:
         if os.path.isdir(os.path.join(path, ".minigit")):
@@ -37,28 +39,31 @@ def find_repo(start_path=None):
         path = parent
 
 
-def get_ops(args):
+def get_ops(args: argparse.Namespace) -> Operations:
+    """Resolve the repository path and return an Operations instance."""
     repo_path = find_repo()
     if not repo_path and args.command != "init":
         print("Error: not a MiniGit repository (no .minigit found)")
         sys.exit(1)
     if args.command == "init":
         repo_path = os.getcwd()
-    db_path = os.path.join(repo_path, ".minigit", "minigit.db")
-    return Operations(repo_path, db_path)
+    db_path = os.path.join(repo_path, ".minigit", "minigit.db")  # type: ignore[arg-type]
+    return Operations(repo_path, db_path)  # type: ignore[arg-type]
 
 
-def cmd_init(args):
+def cmd_init(args: argparse.Namespace) -> None:
+    """Handle the 'init' subcommand."""
     ops = get_ops(args)
     commit_hash = ops.init_repo(
         author=args.author,
-        message=args.message or "Initial commit"
+        message=args.message or "Initial commit",
     )
     print(f"Initialized MiniGit repository in {ops.repo_path}")
     print(f"Initial commit: {commit_hash[:8]}")
 
 
-def cmd_log(args):
+def cmd_log(args: argparse.Namespace) -> None:
+    """Handle the 'log' subcommand — display commit history."""
     ops = get_ops(args)
     history = ops.get_commit_history(args.branch)
     if not history:
@@ -73,7 +78,8 @@ def cmd_log(args):
         print(f"\n    {commit['message']}\n")
 
 
-def cmd_branch(args):
+def cmd_branch(args: argparse.Namespace) -> None:
+    """Handle the 'branch' subcommand — list or create branches."""
     ops = get_ops(args)
     if args.name:
         try:
@@ -88,7 +94,8 @@ def cmd_branch(args):
             print(f"{prefix}{b['name']}  ({b['commit_hash'][:8]})")
 
 
-def cmd_checkout(args):
+def cmd_checkout(args: argparse.Namespace) -> None:
+    """Handle the 'checkout' subcommand — switch branches."""
     ops = get_ops(args)
     try:
         ops.checkout_branch(args.branch_name)
@@ -97,7 +104,8 @@ def cmd_checkout(args):
         print(f"Error: {e}")
 
 
-def cmd_show(args):
+def cmd_show(args: argparse.Namespace) -> None:
+    """Handle the 'show' subcommand — display commit details."""
     ops = get_ops(args)
     commit = ops.get_commit(args.hash)
     if not commit:
@@ -112,7 +120,8 @@ def cmd_show(args):
     print(f"\n    {commit['message']}\n")
 
 
-def cmd_diff(args):
+def cmd_diff(args: argparse.Namespace) -> None:
+    """Handle the 'diff' subcommand — show differences between two commits."""
     ops = get_ops(args)
     diffs = ops.get_diffs(args.hash1, args.hash2)
     if not diffs:
@@ -125,7 +134,7 @@ def cmd_diff(args):
             d["new_content"].splitlines(keepends=True),
             fromfile=f"a/{d['path']}",
             tofile=f"b/{d['path']}",
-            lineterm=""
+            lineterm="",
         )
         for line in diff_lines:
             if line.startswith("+") and not line.startswith("+++"):
@@ -136,7 +145,8 @@ def cmd_diff(args):
                 print(line)
 
 
-def cmd_ls(args):
+def cmd_ls(args: argparse.Namespace) -> None:
+    """Handle the 'ls' subcommand — list files in a tree."""
     ops = get_ops(args)
     if args.tree_hash:
         tree_hash = args.tree_hash
@@ -153,7 +163,8 @@ def cmd_ls(args):
         print(f"{kind}  {entry['hash'][:8]}  {entry['name']}")
 
 
-def cmd_cat(args):
+def cmd_cat(args: argparse.Namespace) -> None:
+    """Handle the 'cat' subcommand — display blob content."""
     ops = get_ops(args)
     content = ops.get_blob_content(args.blob_hash)
     if content is None:
@@ -162,16 +173,19 @@ def cmd_cat(args):
     print(content)
 
 
-def cmd_serve(args):
+def cmd_serve(args: argparse.Namespace) -> None:
+    """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
+
     print(f"Starting MiniGit web UI on http://localhost:{args.port}")
     app.run(debug=True, port=args.port)
 
 
-def main():
+def main() -> None:
+    """Parse arguments and dispatch to the appropriate command handler."""
     parser = argparse.ArgumentParser(
         prog="minigit",
-        description="MiniGit -- a simplified version control system"
+        description="MiniGit -- a simplified version control system",
     )
     sub = parser.add_subparsers(dest="command")
     sub.required = True
@@ -206,7 +220,7 @@ def main():
     p_serve.add_argument("--port", type=int, default=5000)
 
     args = parser.parse_args()
-    commands = {
+    commands: dict[str, Any] = {
         "init": cmd_init,
         "log": cmd_log,
         "branch": cmd_branch,

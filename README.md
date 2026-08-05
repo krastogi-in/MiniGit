@@ -18,9 +18,15 @@ MiniGit/
 │   ├── app.py              # Flask web UI
 │   ├── cli.py              # Command-line interface
 │   └── templates/          # HTML templates for web UI
-├── tests/                  # Test suite
+├── tests/                  # Test suite (69 tests)
+├── docs/
+│   ├── adr/               # Architecture Decision Records
+│   ├── design/            # Design documentation
+│   └── openapi.yaml       # API specification
 ├── repos/                  # Repositories created via web UI
-└── requirements.txt
+├── pyproject.toml          # Project config (ruff, mypy, pytest, commitizen)
+├── Makefile                # Development commands
+└── .pre-commit-config.yaml # Git hooks for quality enforcement
 ```
 
 ## How It Works
@@ -34,10 +40,21 @@ MiniGit mirrors real Git's object model:
 
 Every commit is a full snapshot. Unchanged files share the same blob across commits. Diffs are computed on-the-fly by comparing two commit trees.
 
-## Setup
+## Quick Start
 
 ```bash
-pip install -r requirements.txt
+# One-command setup (installs all dependencies + pre-commit hooks)
+make setup
+
+# Run all quality checks (lint + typecheck + tests)
+make check
+```
+
+## Setup (Manual)
+
+```bash
+python -m pip install -e ".[dev]"
+pre-commit install
 ```
 
 ## Usage
@@ -84,16 +101,33 @@ python src/app.py
 
 The web UI lets you create repos, browse files, view commit history with a timeline graph, and see color-coded diffs.
 
+## Development
+
+| Command | Description |
+|---------|-------------|
+| `make setup` | Install dependencies + pre-commit hooks |
+| `make lint` | Run ruff linter (style + security) |
+| `make typecheck` | Run mypy type checker |
+| `make test` | Run pytest with coverage |
+| `make check` | All checks (lint + typecheck + test + boundaries) |
+| `make fmt` | Auto-format code |
+| `make audit` | Dependency security audit |
+| `make boundaries` | Check architectural layer violations |
+
 ## Running Tests
 
 ```bash
-pytest tests/ -v
+# With coverage report
+pytest tests/ -v --cov=src --cov-report=term-missing
+
+# Or via Makefile
+make test
 ```
 
-## TODO (your part)
+## Contributing
 
-The following operations in `src/frontend/operations.py` are stubs:
-
-- `add(file_path)` -- stage a file for the next commit
-- `delete_file(file_path)` -- remove a file from tracking
-- `create_new_commit(message, author)` -- create a new commit on the current branch
+1. Follow [conventional commit](https://www.conventionalcommits.org/) messages
+2. Add type annotations to all new functions
+3. Add docstrings to all public functions
+4. Ensure `make check` passes before opening a PR
+5. See [AGENTS.md](AGENTS.md) for architectural rules

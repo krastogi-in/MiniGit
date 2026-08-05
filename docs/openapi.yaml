@@ -1,0 +1,241 @@
+openapi: "3.1.0"
+info:
+  title: MiniGit Web API
+  version: "0.1.0"
+  description: |
+    REST API for MiniGit — a simplified Git clone with content-addressable storage.
+    Serves a web UI for browsing repositories, commits, trees, and diffs.
+
+servers:
+  - url: http://localhost:5000
+    description: Local development server
+
+paths:
+  /:
+    get:
+      summary: List all repositories
+      operationId: listRepos
+      responses:
+        "200":
+          description: HTML page listing all registered repositories
+
+  /api/suggest-dirs:
+    get:
+      summary: Autocomplete directory paths
+      operationId: suggestDirs
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Partial directory path to autocomplete
+      responses:
+        "200":
+          description: JSON array of matching directory paths
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /new-repo:
+    post:
+      summary: Create or register a repository
+      operationId: createRepo
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                  description: Existing directory path to register
+                name:
+                  type: string
+                  description: Repository name (used if creating new)
+      responses:
+        "302":
+          description: Redirect to repo detail page on success
+
+  /repo/{repo_name}:
+    get:
+      summary: Repository detail page
+      operationId: repoDetail
+      parameters:
+        - name: repo_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: branch
+          in: query
+          required: false
+          schema:
+            type: string
+            default: main
+      responses:
+        "200":
+          description: HTML page with repo overview, branches, and latest tree
+
+  /repo/{repo_name}/tree/{tree_hash}:
+    get:
+      summary: Browse tree entries
+      operationId: browseTree
+      parameters:
+        - name: repo_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tree_hash
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+        - name: parent
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML page listing tree entries
+
+  /repo/{repo_name}/blob/{blob_hash}:
+    get:
+      summary: View blob content
+      operationId: viewBlob
+      parameters:
+        - name: repo_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: blob_hash
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML page displaying file content
+
+  /repo/{repo_name}/history:
+    get:
+      summary: Commit history
+      operationId: commitHistory
+      parameters:
+        - name: repo_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: branch
+          in: query
+          required: false
+          schema:
+            type: string
+            default: main
+      responses:
+        "200":
+          description: HTML page with commit timeline
+
+  /repo/{repo_name}/commit/{commit_hash}:
+    get:
+      summary: Commit detail with diffs
+      operationId: commitDetail
+      parameters:
+        - name: repo_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: commit_hash
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+      responses:
+        "200":
+          description: HTML page with commit metadata and file diffs
+
+  /repo/{repo_name}/working-dir:
+    get:
+      summary: Browse working directory
+      operationId: workingDir
+      parameters:
+        - name: repo_name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: HTML page listing working directory files and staged changes
+
+  /repo/{repo_name}/stage:
+    post:
+      summary: Stage a file for commit
+      operationId: stageFile
+      parameters:
+        - name: repo_name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                path:
+                  type: string
+                subdir:
+                  type: string
+              required: [path]
+      responses:
+        "302":
+          description: Redirect back to working directory
+
+  /repo/{repo_name}/commit:
+    post:
+      summary: Create a new commit
+      operationId: createCommit
+      parameters:
+        - name: repo_name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+              required: [message]
+      responses:
+        "302":
+          description: Redirect to repo detail on success

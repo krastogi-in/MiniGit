@@ -1,19 +1,27 @@
-from components.blob import Blob
+"""Tree object — recursive directory structure with content-addressed hashing."""
+
+from __future__ import annotations
+
 import os
 from hashlib import sha256
 
+from components.blob import Blob
+
 
 class Tree:
-    def __init__(self, path):
-        self.files = {}
-        self._explore_project(path)
+    """Recursive directory snapshot that maps filenames to Blobs or sub-Trees.
 
-    IGNORE_DIRS = {
+    Walks the filesystem at construction time, skipping ignored directories
+    and binary file extensions. The tree hash is computed from sorted entries,
+    enabling change detection by comparing hashes.
+    """
+
+    IGNORE_DIRS: set[str] = {
         ".minigit", ".git", "__pycache__", ".pytest_cache",
         "node_modules", ".venv", "venv", ".tox", ".mypy_cache",
         ".eggs", "*.egg-info", "dist", "build",
     }
-    IGNORE_EXTENSIONS = {
+    IGNORE_EXTENSIONS: set[str] = {
         ".pyc", ".pyo", ".so", ".o", ".a", ".dylib",
         ".pkl", ".pt", ".pth", ".bin", ".h5", ".hdf5",
         ".npy", ".npz", ".onnx", ".pb",
@@ -24,7 +32,12 @@ class Tree:
         ".db", ".sqlite", ".sqlite3",
     }
 
-    def _explore_project(self, path):
+    def __init__(self, path: str) -> None:
+        self.files: dict[str, Blob | Tree] = {}
+        self._explore_project(path)
+
+    def _explore_project(self, path: str) -> None:
+        """Recursively walk the directory at *path*, populating self.files."""
         for obj in os.listdir(path):
             if obj.startswith(".") and obj in self.IGNORE_DIRS:
                 continue
@@ -38,13 +51,14 @@ class Tree:
                 if ext.lower() in self.IGNORE_EXTENSIONS:
                     continue
                 try:
-                    with open(full_path, 'r') as f:
+                    with open(full_path, "r") as f:
                         self.files[obj] = Blob(f.read())
                 except (UnicodeDecodeError, PermissionError):
                     pass
 
-    def get_file(self, path):
-        obj_path = path.split('/')
+    def get_file(self, path: str) -> Blob | None:
+        """Lookup a file by slash-separated relative path within this tree."""
+        obj_path = path.split("/")
         for obj in obj_path:
             if obj in self.files:
                 if isinstance(self.files[obj], Blob):
@@ -53,14 +67,9 @@ class Tree:
                     return self.files[obj].get_file("/".join(obj_path[1:]))
         return None
 
-    def __str__(self):
-        return str(self.files)
-
-    def __repr__(self):
-        return f"Tree(path={self.path}, hash={self.get_hash()})"
-
-    def get_hash(self):
-        entries = []
+    def get_hash(self) -> str:
+        """Compute the SHA-256 hash of this tree's sorted entry list."""
+        entries: list[str] = []
         for name in sorted(self.files.keys()):
             obj = self.files[name]
             if isinstance(obj, Blob):
@@ -69,8 +78,16 @@ class Tree:
                 entries.append(f"tree {obj.get_hash()} {name}")
         return sha256("\n".join(entries).encode()).hexdigest()
 
-    def __hash__(self):
+    def __str__(self) -> str:
+        return str(self.files)
+
+    def __repr__(self) -> str:
+        return f"Tree(hash={self.get_hash()})"
+
+    def __hash__(self) -> int:
         return hash(self.get_hash())
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Tree):
+            return NotImplemented
         return self.get_hash() == other.get_hash()

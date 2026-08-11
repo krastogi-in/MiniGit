@@ -1,4 +1,4 @@
-.PHONY: setup lint typecheck test check fmt clean audit boundaries
+.PHONY: setup lint typecheck test check fmt clean audit boundaries eval-skills
 
 # One-command setup: install all dependencies
 setup:
@@ -39,6 +39,10 @@ audit:
 # Architectural boundary check
 boundaries:
 	lint-imports
+
+# Deterministic skill-registry evals (fixtures; no Jira/LLM)
+eval-skills:
+	python3 evals/run_skill_evals.py
 
 # Clean build artifacts
 clean:

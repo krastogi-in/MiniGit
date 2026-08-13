@@ -6,7 +6,7 @@ How might we run any Jira-backed feature through an AI SDLC with humans on the o
 ## Recommended Direction
 **Ticket-driven factory** hosted beside the MiniGit sandbox.
 
-- Skills in `Skills/` (Cursor via `.cursor/skills/` symlinks)
+- Skills in `skills/` (Cursor via `.cursor/skills/` symlinks)
 - Orchestrator `sdlc-loop`; state = BLRID labels/comments
 - Dual-layer + maker/checker + supervised autonomy ([loops](https://skills.addy.ie/loops/))
 - MiniGit + `AGENTS.md` only when the **ticket** requires product code

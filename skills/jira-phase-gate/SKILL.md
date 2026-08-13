@@ -47,7 +47,7 @@ Steps:
 
 1. Discover Atlassian MCP tools; authenticate if needed.
 2. Read issue labels + status (state).
-3. Post comment (`Skills/_templates/phase-comment.md`, gate packet, or escalate packet).
+3. Post comment (`skills/_templates/phase-comment.md`, gate packet, or escalate packet).
 4. **Accumulate** required labels — never strip prior `sdlc:*`. Strip gate approvals only per **Feedback revocation** below.
 5. Apply status transition when the contract says so.
 6. Confirm write (re-read labels/status).
@@ -104,4 +104,4 @@ On escalate: accumulate `sdlc:blocked` + failure comment. Resume after outer-loo
 
 ## Related
 
-`docs/ai-sdlc/README.md` · `docs/design/ai-sdlc-loop.md` · `Skills/sdlc-loop/SKILL.md`
+`docs/ai-sdlc/README.md` · `docs/design/ai-sdlc-loop.md` · `skills/sdlc-loop/SKILL.md`

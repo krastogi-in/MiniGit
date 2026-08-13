@@ -22,7 +22,7 @@ MiniGit/
 │   ├── app.py              # Flask web UI
 │   ├── cli.py              # Command-line interface
 │   └── templates/          # HTML templates for web UI
-├── Skills/                 # AI SDLC factory (feature-agnostic)
+├── skills/                 # AI SDLC factory (feature-agnostic)
 ├── evals/                  # Skill registry evals + rubrics
 ├── tests/                  # Test suite
 ├── docs/

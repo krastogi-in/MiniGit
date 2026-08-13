@@ -27,7 +27,7 @@ Do **not** pause for casual confirmation. Escalate or **HUMAN GATE** when:
 - Missing `sdlc:agent-ready` / `sdlc:human-ready` before maker
 - Human set `sdlc:need-review-stage` (incorporate feedback)
 
-Escalate packet format (**ESCALATE**): see `Skills/sdlc-loop/SKILL.md`. Accumulate `sdlc:blocked` via `jira-phase-gate`.
+Escalate packet format (**ESCALATE**): see `skills/sdlc-loop/SKILL.md`. Accumulate `sdlc:blocked` via `jira-phase-gate`.
 
 **Human gates** and **verdict** are owned by `sdlc-loop`, not every phase skill.
 

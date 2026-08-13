@@ -115,7 +115,7 @@ Use `getTransitionsForJiraIssue` + `transitionJiraIssue`. Match by destination *
 
 For each phase until gate/escalate:
 
-1. Load phase skill from `Skills/<name>/SKILL.md`
+1. Load phase skill from `skills/<name>/SKILL.md`
 2. Ground work in **this issue** + repo conventions (`AGENTS.md` if changing MiniGit)
 3. Deterministic checks → reasoning → rubric
 4. On pass → `jira-phase-gate` (comment + accumulate label; status when required)
@@ -198,4 +198,4 @@ If `sdlc:agent-ready` is set and the human comments changes (not yet `approved`)
 
 ## Related
 
-- `Skills/REGISTRY.md` · `Skills/jira-phase-gate/SKILL.md` · `evals/rubrics/loop.md`
+- `skills/REGISTRY.md` · `skills/jira-phase-gate/SKILL.md` · `evals/rubrics/loop.md`

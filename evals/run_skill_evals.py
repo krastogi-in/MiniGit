@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic skill-registry evals (dummy/fixture checks).
 
-Validates that Skills/, rubrics, and fixture artifacts exist with required
+Validates that skills/, rubrics, and fixture artifacts exist with required
 sections. Does not call Jira or LLMs.
 """
 
@@ -129,7 +129,7 @@ def main() -> None:
             fail(f".cursor/skills/{name} missing (expected symlink)")
         target = (SKILLS / name).resolve()
         if link.resolve() != target:
-            fail(f".cursor/skills/{name} does not point at Skills/{name}")
+            fail(f".cursor/skills/{name} does not point at skills/{name}")
 
     print("OK: skill registry evals passed")
     print(f"  skills={len(REQUIRED_SKILLS)} rubrics={len(REQUIRED_RUBRICS)}")

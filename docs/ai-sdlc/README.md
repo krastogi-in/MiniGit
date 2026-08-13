@@ -4,7 +4,7 @@ This repository contains **two layers**. Do not confuse them.
 
 | Layer | What it is | Entry points |
 |-------|------------|--------------|
-| **AI SDLC factory** | Generic, ticket-driven skills + loop. Works for **any** feature described by a Jira issue. | `Skills/`, `docs/ai-sdlc/`, `evals/` |
+| **AI SDLC factory** | Generic, ticket-driven skills + loop. Works for **any** feature described by a Jira issue. | `skills/`, `docs/ai-sdlc/`, `evals/` |
 | **MiniGit app** | Educational Git clone (Python/SQLite/Flask) used as the **sandbox** when a ticket asks for product changes. | `src/`, `tests/`, [`AGENTS.md`](../../AGENTS.md) |
 
 Inspired by [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) and [loop engineering](https://skills.addy.ie/loops/).
@@ -40,7 +40,7 @@ make check         # MiniGit product quality (when coding the app)
 
 ## Skills map
 
-See [`Skills/REGISTRY.md`](../../Skills/REGISTRY.md). Orchestrator: `sdlc-loop`. Phase workers are feature-agnostic.
+See [`skills/REGISTRY.md`](../../skills/REGISTRY.md). Orchestrator: `sdlc-loop`. Phase workers are feature-agnostic.
 
 ## Keep / don’t keep
 

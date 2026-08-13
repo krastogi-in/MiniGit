@@ -29,7 +29,7 @@ Divergent → convergent → one-pager. If the ticket targets this repo’s prod
 
 ## Intervention
 
-Escalate only per `Skills/_templates/dual-layer.md`. No routine pause.
+Escalate only per `skills/_templates/dual-layer.md`. No routine pause.
 
 ## Jira
 

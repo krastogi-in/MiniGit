@@ -20,7 +20,7 @@ People guide: [README.md](../README.md)
 ```
 docs/ai-sdlc/README.md
         │
-Skills/REGISTRY + sdlc-loop + phase skills + jira-phase-gate
+skills/REGISTRY + sdlc-loop + phase skills + jira-phase-gate
         │
 .cursor/skills symlinks + evals
         │

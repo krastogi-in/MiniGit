@@ -10,7 +10,7 @@ make check
 
 ## Project Structure
 ```
-src/ tests/ Skills/ evals/
+src/ tests/ skills/ evals/
 ```
 
 ## Code Style

@@ -19,7 +19,7 @@ Provide a **feature-agnostic** AI SDLC skills registry and loop harness so a hum
 
 1. **Factory ≠ feature** — no Merge/two-parent/perf numbers in skills; those belong in ticket-produced specs.
 2. **Jira** = state DB via Atlassian MCP; labels accumulate (`sdlc:ideate` … `sdlc:done`, plus `sdlc:blocked`).
-3. **Skills** in `Skills/`; `.cursor/skills/` symlinks.
+3. **Skills** in `skills/`; `.cursor/skills/` symlinks.
 4. **Autonomy** = supervised by default ([loop engineering](https://skills.addy.ie/loops/)); orchestrator `sdlc-loop`.
 5. **Keep `AGENTS.md`** for MiniGit product conventions; factory explained in `docs/ai-sdlc/README.md`.
 6. **Eval v1** = deterministic structure checks, not LLM-as-judge.
@@ -48,7 +48,7 @@ make setup | make lint | make typecheck | make test | make check | make fmt
 docs/ai-sdlc/README.md          # What this project is
 docs/design/ai-sdlc-loop.md
 docs/examples/                  # Optional samples only
-Skills/                         # Factory skills (generic)
+skills/                         # Factory skills (generic)
 .cursor/skills/                 # Symlinks
 evals/                          # Rubrics + eval runner
 AGENTS.md                       # MiniGit product agents guide
@@ -69,7 +69,7 @@ MiniGit: `AGENTS.md`.
 
 ## Dual-layer / phase map
 
-See `Skills/REGISTRY.md`.
+See `skills/REGISTRY.md`.
 
 ## Boundaries
 
@@ -82,7 +82,7 @@ See `Skills/REGISTRY.md`.
 ## Success Criteria
 
 - [ ] `docs/ai-sdlc/README.md` explains factory vs MiniGit
-- [ ] Skills/REGISTRY feature-agnostic; Merge only under `docs/examples/`
+- [ ] skills/REGISTRY feature-agnostic; Merge only under `docs/examples/`
 - [ ] `sdlc-loop` takes issue key as input
 - [ ] `make eval-skills` green
 - [ ] `AGENTS.md` retained for MiniGit

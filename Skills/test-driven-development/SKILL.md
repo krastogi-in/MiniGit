@@ -2,7 +2,8 @@
 name: test-driven-development
 description: >-
   Inner-loop TDD under sdlc-loop: RED-GREEN-REFACTOR and prove-it for bugs.
-  Feature-agnostic; uses the repository’s test commands. Accumulates sdlc:test.
+  Feature-agnostic; uses the repository’s test commands. Runs on branch
+  aiagent/<ISSUE-KEY> after sdlc:human-ready plan. Accumulates sdlc:test.
   Escalates if the suite stays red. Perf gates only if the ticket/spec defines them.
 ---
 
@@ -15,11 +16,14 @@ Orchestrated by `sdlc-loop`.
 
 ## Deterministic
 
+- [ ] Confirm maker gates still hold (`sdlc:agent-ready`, `sdlc:human-ready`) — else stop
 - [ ] Discover stack first (MiniGit: `make test` / pytest / `tmp_path`)
 - [ ] RED → GREEN → REFACTOR; bug fixes prove-it first
+- [ ] Cover gaps called out as already-partial or risk areas in plan/spec
 - [ ] No network; isolate fixtures per project norms
 - [ ] Full suite green before claiming phase done
 - [ ] Apply **perf (or other) gates only if the ticket/spec states them**
+- [ ] Keep work on **`aiagent/<ISSUE-KEY>`** and push so the PR stays current
 
 ## Reasoning
 
@@ -31,4 +35,4 @@ Escalate if required verifies stay red. Green/red oracles may stay lights-out ([
 
 ## Jira
 
-On pass → `jira-phase-gate` + `sdlc:test`.
+On pass → `jira-phase-gate` + `sdlc:test`. Human still reviews the PR before status **Review** / checker if not already approved.

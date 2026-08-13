@@ -60,12 +60,20 @@ def main() -> None:
         "outer loop",
         "sdlc:ideate",
         "feature-agnostic",
+        "sdlc:agent-ready",
+        "sdlc:human-ready",
+        "aiagent/<KEY>",
     )
     require_file(
         ROOT / "docs" / "ai-sdlc" / "README.md",
         "outer loop",
         "Jira",
         "AGENTS.md",
+    )
+    require_file(
+        ROOT / "agent_space" / "README.md",
+        "ISSUE-KEY",
+        "Not product docs",
     )
     require_file(ROOT / "docs" / "examples" / "merge" / "README.md", "Example only")
     require_file(SKILLS / "_templates" / "phase-comment.md", "SDLC phase")
@@ -78,7 +86,8 @@ def main() -> None:
         ROOT / "docs" / "design" / "ai-sdlc-loop.md",
         "outer loop",
         "Inner",
-        "PLAN GATE",
+        "HUMAN GATE",
+        "sdlc:agent-ready",
     )
 
     for name in REQUIRED_SKILLS:
@@ -88,7 +97,17 @@ def main() -> None:
         if not front.startswith("---"):
             fail(f"{name}/SKILL.md missing YAML frontmatter")
         if name == "sdlc-loop":
-            require_file(skill, "OUTER LOOP", "PLAN GATE", "ESCALATE", "VERDICT")
+            require_file(
+                skill,
+                "OUTER LOOP",
+                "HUMAN GATE",
+                "ESCALATE",
+                "VERDICT",
+                "sdlc:agent-ready",
+                "Resume",
+            )
+        elif name == "jira-phase-gate":
+            require_file(skill, "Deterministic", "sdlc:agent-ready", "In Progress", "Review")
         else:
             require_file(skill, "Deterministic")
 

@@ -1,8 +1,8 @@
 # Task List: AI SDLC Skills Registry (generic)
 
-Spec: [docs/specs/ai-sdlc-skills-registry.md](../docs/specs/ai-sdlc-skills-registry.md)  
-Plan: [tasks/plan.md](plan.md)  
-Guide: [docs/ai-sdlc/README.md](../docs/ai-sdlc/README.md)
+Spec: [specs/ai-sdlc-skills-registry.md](../specs/ai-sdlc-skills-registry.md)  
+Plan: [plan.md](plan.md)  
+Guide: [README.md](../README.md)
 
 ## Phase 1: Factory foundation
 

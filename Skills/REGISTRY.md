@@ -28,8 +28,38 @@ Skills are **feature-agnostic**. Input = issue key; work is derived from the tic
 | State + fingerprint + status | `jira-phase-gate` |
 | Maker | `incremental-implementation` (+ `test-driven-development`) |
 | Checker | `code-review-and-quality` (separate pass; inline comments) |
+| Investigator | `investigator` (debug, RCA — read-only) |
 | Outer loop | Human |
 | Product conventions (when coding MiniGit) | root `AGENTS.md` |
+
+## Tool-level skills (used by agents, not phases)
+
+| Skill | Purpose | Used by |
+|-------|---------|---------|
+| `diff-preview` | Per-file diff approval before edits | Maker |
+| `commit-workflow` | Keyword gates for commit/push | Maker |
+| `local-validation` | Pre-declare + run + compare validation | Maker |
+
+## Templates (`Skills/_templates/`)
+
+| Template | Purpose |
+|----------|---------|
+| `dual-layer.md` | Deterministic + reasoning contract for every phase |
+| `phase-comment.md` | Jira comment format for phase evidence |
+| `handoff.md` | Cross-session state bus between agents |
+| `design-doc.md` | Architecture design document (11 sections) |
+| `task-breakdown.md` | Phased task list with complexity |
+| `phase-report.md` | Phase completion receipt (completed / validation / deferred / ops) |
+| `rca.md` | Root Cause Analysis template |
+
+## Mode activation (`.cursor/rules/`)
+
+| Rule file | Triggers on | Loads |
+|-----------|-------------|-------|
+| `architect-mode.mdc` | "use architect", "plan a feature" | idea-refine, spec, planning |
+| `developer-mode.mdc` | "use developer", "implement" | incremental-impl, TDD, diff-preview, commit, validation |
+| `reviewer-mode.mdc` | "use reviewer", "code review" | code-review-and-quality |
+| `investigator-mode.mdc` | "investigate", "debug this" | investigator |
 
 ## Phase map
 

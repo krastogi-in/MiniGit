@@ -25,6 +25,10 @@ REQUIRED_SKILLS = [
     "test-driven-development",
     "code-review-and-quality",
     "jira-phase-gate",
+    "diff-preview",
+    "commit-workflow",
+    "local-validation",
+    "investigator",
 ]
 
 REQUIRED_RUBRICS = [
@@ -35,6 +39,23 @@ REQUIRED_RUBRICS = [
     "implement.md",
     "test.md",
     "review.md",
+]
+
+REQUIRED_TEMPLATES = [
+    "dual-layer.md",
+    "phase-comment.md",
+    "handoff.md",
+    "design-doc.md",
+    "task-breakdown.md",
+    "phase-report.md",
+    "rca.md",
+]
+
+REQUIRED_RULES = [
+    "architect-mode.mdc",
+    "developer-mode.mdc",
+    "reviewer-mode.mdc",
+    "investigator-mode.mdc",
 ]
 
 
@@ -63,6 +84,10 @@ def main() -> None:
         "aiagent-ready",
         "human-approved",
         "aiagent/<KEY>",
+        "diff-preview",
+        "commit-workflow",
+        "local-validation",
+        "investigator",
     )
     require_file(
         ROOT / "docs" / "ai-sdlc" / "README.md",
@@ -108,11 +133,24 @@ def main() -> None:
             )
         elif name == "jira-phase-gate":
             require_file(skill, "Deterministic", "aiagent-ready", "In Progress", "Review")
+        elif name == "code-review-and-quality":
+            require_file(skill, "Deterministic", "Severity", "BLOCKER", "APPROVE")
+        elif name == "investigator":
+            require_file(skill, "Deterministic", "Root Cause", "hypothesis")
         else:
             require_file(skill, "Deterministic")
 
+    for name in REQUIRED_SKILLS:
+        require_file(SKILLS / name / "SKILL.md", "What You Are NOT")
+
     for rubric in REQUIRED_RUBRICS:
         require_file(RUBRICS / rubric, "Pass if", "Fail if")
+
+    for template in REQUIRED_TEMPLATES:
+        require_file(SKILLS / "_templates" / template)
+
+    for rule in REQUIRED_RULES:
+        require_file(ROOT / ".cursor" / "rules" / rule, "alwaysApply")
 
     require_file(FIXTURES / "dummy-idea.md", "Problem Statement", "Not Doing")
     require_file(FIXTURES / "dummy-spec.md", "Objective", "Success Criteria")
@@ -132,7 +170,8 @@ def main() -> None:
             fail(f".cursor/skills/{name} does not point at Skills/{name}")
 
     print("OK: skill registry evals passed")
-    print(f"  skills={len(REQUIRED_SKILLS)} rubrics={len(REQUIRED_RUBRICS)}")
+    print(f"  skills={len(REQUIRED_SKILLS)} rubrics={len(REQUIRED_RUBRICS)} "
+          f"templates={len(REQUIRED_TEMPLATES)} rules={len(REQUIRED_RULES)}")
 
 
 if __name__ == "__main__":

@@ -7,31 +7,39 @@ description: >-
   Accumulates sdlc:implement.
 ---
 
-# Incremental Implementation (maker · inner loop)
+# Incremental Implementation (maker - inner loop)
 
 Adapted from [incremental-implementation](https://github.com/addyosmani/agent-skills/blob/main/skills/incremental-implementation/SKILL.md).
 
-**Role: Maker** — never run checker in this pass. Orchestrated by `sdlc-loop`.
+**Role: Maker** -- never run checker in this pass. Orchestrated by `sdlc-loop`.
 
-**Label:** `sdlc:implement` · **Rubric:** `evals/rubrics/implement.md`
+**Label:** `sdlc:implement` - **Rubric:** `evals/rubrics/implement.md`
+
+## Skills to read
+
+Before implementing, read these tool-level skills:
+- `Skills/diff-preview/SKILL.md` -- show diffs before applying changes
+- `Skills/commit-workflow/SKILL.md` -- stage, commit, push protocol
+- `Skills/local-validation/SKILL.md` -- validate before committing
 
 ## Gate (fail closed)
 
 Before any product code for this ticket:
 
 - [ ] Labels include **`aiagent-ready`** and **`human-approved`** (or harness confirmed an `approved` comment and applied `human-approved`)
-- [ ] If either missing → stop; ask harness to post missing-gate summary — **do not code**
+- [ ] If either missing -> stop; ask harness to post missing-gate summary -- **do not code**
 
-Also check for **`aiagent-approved`** only as “agent already marked ready”: if present with an open PR, prefer resume/fixup over a second PR unless human asks.
+Also check for **`aiagent-approved`** only as "agent already marked ready": if present with an open PR, prefer resume/fixup over a second PR unless human asks.
 
 ## Deterministic
 
 - [ ] Only items from the approved plan/todo for **this issue** (skip or verify-only for already-covered tasks)
 - [ ] Work on branch **`aiagent/<ISSUE-KEY>`** (create from default branch if needed)
+- [ ] **Show diffs before editing** -- follow the diff-preview skill
 - [ ] After each slice: relevant verifies; before done: project check command (MiniGit: `make check`)
 - [ ] Scope discipline; follow `AGENTS.md` when editing MiniGit
 - [ ] Open / update a **GitHub PR** from that branch for human review (`gh pr create` when ready)
-- [ ] Commit only when user/harness policy allows
+- [ ] **Commit only when user says "commit"** -- follow the commit-workflow skill
 
 ## Reasoning
 
@@ -43,6 +51,13 @@ Simplest correct slice for the planned tasks. Call out reused existing code in P
 2. Via `jira-phase-gate`: accumulate **`sdlc:implement`** and **`aiagent-approved`**
 3. Comment PR URL + ask human to review; **do not** move status to Review yourself until human approves implementation
 4. Hand back to harness for **HUMAN GATE** (implementation)
+
+## What You Are NOT
+
+- You are NOT the Reviewer -- don't critique existing code quality
+- You are NOT the Tester -- don't write the test suite unless the phase says so
+- You are NOT the Architect -- don't redesign; flag gaps back to the user
+- You are NOT a release manager -- don't push, tag, or open MRs unless asked
 
 ## Intervention
 

@@ -196,6 +196,12 @@ If `aiagent-ready` is set and the human comments changes (not yet `approved`):
 | Interactive | Also pause after each phase |
 | Unattended | Forbidden in v1 |
 
+## What You Are NOT
+
+- You are NOT a phase worker -- you orchestrate, you don't do the work
+- You are NOT the Developer -- don't write code; delegate to maker skills
+- You are NOT autonomous -- stop at human gates, don't bypass them
+
 ## Related
 
 - `Skills/REGISTRY.md` · `Skills/jira-phase-gate/SKILL.md` · `evals/rubrics/loop.md`

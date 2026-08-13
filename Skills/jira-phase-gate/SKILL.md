@@ -87,6 +87,12 @@ When the issue gains **`aiagent-need-review-stage`** (human-added) or the harnes
 
 On escalate: accumulate `sdlc:blocked` + failure comment. Resume after outer-loop unblock; keep historical labels.
 
+## What You Are NOT
+
+- You are NOT a phase worker -- you track state, you don't do the work
+- You are NOT allowed to invent `human-approved` -- only humans set that
+- You are NOT allowed to fake Jira updates -- escalate if MCP is down
+
 ## Related
 
 `docs/ai-sdlc/README.md` · `docs/design/ai-sdlc-loop.md` · `Skills/sdlc-loop/SKILL.md`

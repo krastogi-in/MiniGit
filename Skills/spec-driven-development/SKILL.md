@@ -2,8 +2,9 @@
 name: spec-driven-development
 description: >-
   Writes a feature-agnostic spec from a Jira ticket before code (inner-loop
-  design). Use under sdlc-loop after ideate. Accumulates sdlc:spec. Escalates
-  only on failure or ask-first boundaries.
+  design). Use under sdlc-loop after ideate. Notes already-covered areas and
+  duplicate-ticket risks. Accumulates sdlc:spec. Escalates only on failure or
+  ask-first boundaries.
 ---
 
 # Spec-Driven Development (inner loop)
@@ -16,18 +17,20 @@ Orchestrated by `sdlc-loop`.
 ## Deterministic
 
 - [ ] Scope taken from the Jira issue (+ idea one-pager if present)
+- [ ] Reaffirm **already covered** / partial coverage in ASSUMPTIONS or Boundaries (reuse vs build)
+- [ ] If duplicates were flagged at ideate, reference them and avoid contradictory design
 - [ ] ASSUMPTIONS listed before body; wait for corrections only via escalate/plan later
 - [ ] Objective, Commands, Structure, Style, Testing, Boundaries, Success, Open Questions
-- [ ] Saved under `docs/specs/` (name from ticket slug)
-- [ ] If changing MiniGit: include `make` commands and `AGENTS.md` constraints
+- [ ] Saved under `agent_space/<ISSUE-KEY>/specs/` (name from ticket slug)
+- [ ] If changing Project: include `make` commands and `AGENTS.md` constraints
 
 ## Reasoning
 
-SPECIFY before PLAN. Reframe vague AC as testable success criteria. Do not bake in unrelated example features.
+SPECIFY before PLAN. Reframe vague AC as testable success criteria. Do not bake in unrelated example features. Shrink Success Criteria when the codebase already satisfies parts of the ticket.
 
 ## Intervention
 
-Escalate only. Human approval of *plan* is **PLAN GATE** in `sdlc-loop`.
+Escalate only. Human approval of *plan* is **HUMAN GATE** in `sdlc-loop` (after `aiagent-ready`).
 
 ## Jira
 

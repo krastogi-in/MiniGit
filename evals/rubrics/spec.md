@@ -4,7 +4,7 @@
 
 - [ ] Assumptions surfaced
 - [ ] Six core areas + success criteria present
-- [ ] Saved under `docs/specs/`
+- [ ] Saved under `agent_space/<ISSUE-KEY>/specs/`
 - [ ] Human approval recorded (comment or checkbox)
 
 ## Fail if

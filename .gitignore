@@ -44,5 +44,6 @@ Thumbs.db
 .env
 .env.local
 
-# AgentReady reports
-.agentready/
+# Agent run scratch (per ticket); see agent_space/README.md
+# Optionally ignore local runs: agent_space/*/
+# Keep agent_space/README.md tracked.

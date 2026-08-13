@@ -95,5 +95,6 @@ See `Skills/REGISTRY.md`.
 
 ## Related
 
-- Example narrative: [docs/examples/merge/](../examples/merge/)
-- Idea: [docs/ideas/ai-sdlc-skills-registry.md](../ideas/ai-sdlc-skills-registry.md)
+- Example narrative: [docs/examples/merge/](../../examples/merge/)
+- Idea: [ideas/ai-sdlc-skills-registry.md](../ideas/ai-sdlc-skills-registry.md)
+- Ticket runs: [agent_space/](../../../agent_space/README.md)

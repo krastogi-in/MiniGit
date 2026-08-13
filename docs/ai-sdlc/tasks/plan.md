@@ -4,8 +4,8 @@
 
 Ship and maintain a **ticket-driven** AI SDLC factory: Cursor skills + `sdlc-loop` + Jira state + rubrics/evals. Scope for any feature comes from the Jira issue, not from a baked-in backlog. MiniGit remains the sandbox app (`AGENTS.md`).
 
-Spec: [docs/specs/ai-sdlc-skills-registry.md](../docs/specs/ai-sdlc-skills-registry.md)  
-People guide: [docs/ai-sdlc/README.md](../docs/ai-sdlc/README.md)
+Spec: [specs/ai-sdlc-skills-registry.md](../specs/ai-sdlc-skills-registry.md)  
+People guide: [README.md](../README.md)
 
 ## Architecture Decisions
 

@@ -7,6 +7,7 @@ Copy into each phase `SKILL.md`. Orchestration: `sdlc-loop`. Design: `docs/desig
 - [ ] Required artifacts exist at expected paths
 - [ ] Rubric file checked: `evals/rubrics/{{phase}}.md`
 - [ ] MiniGit commands run when applicable (`make check`, etc.)
+- [ ] Gate labels respected (`aiagent-ready`, `human-approved`, …) when the phase requires them
 - [ ] Do not claim done if any checkbox fails
 
 ## Reasoning layer
@@ -16,25 +17,28 @@ Copy into each phase `SKILL.md`. Orchestration: `sdlc-loop`. Design: `docs/desig
 
 ## Intervention (outer loop — escalate, don’t chatter)
 
-Do **not** pause for casual confirmation. Escalate only when:
+Do **not** pause for casual confirmation. Escalate or **HUMAN GATE** when:
 
 - Deterministic/rubric fail after one retry
 - Verify (`make check`) still red
 - Ask-first boundary hit
 - Checker Critical finding
 - Product ambiguity / connector (Jira MCP) down
+- Missing `aiagent-ready` / `human-approved` before maker
+- Human set `aiagent-need-review-stage` (incorporate feedback)
 
 Escalate packet format (**ESCALATE**): see `Skills/sdlc-loop/SKILL.md`. Accumulate `sdlc:blocked` via `jira-phase-gate`.
 
-**Plan gate** and **verdict** are owned by `sdlc-loop`, not every phase skill.
+**Human gates** and **verdict** are owned by `sdlc-loop`, not every phase skill.
 
 ## Jira fingerprint
 
 After rubric pass, invoke `jira-phase-gate`:
 
 1. Post evidence comment (`_templates/phase-comment.md`)
-2. **Accumulate** label `{{LABEL}}` (keep prior `sdlc:*`)
+2. **Accumulate** label `{{LABEL}}` (keep prior `sdlc:*` and gate labels)
+3. Apply status transitions when the loop contract requires (In Progress / Review)
 
 ## Feedback
 
-On outer-loop rejection: BLRID comment + optionally `evals/feedback/{{issue}}-{{phase}}.md`, then resume under `sdlc-loop`.
+On outer-loop rejection or `aiagent-need-review-stage`: agent removes stale `human-approved` / `aiagent-approved`, incorporates BLRID + PR comments (+ optional `evals/feedback/{{issue}}-{{phase}}.md`), then waits for re-approval and clears the feedback label.

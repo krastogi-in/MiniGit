@@ -11,6 +11,7 @@ How might we run any Jira-backed feature through an AI SDLC with humans on the o
 - Dual-layer + maker/checker + supervised autonomy ([loops](https://skills.addy.ie/loops/))
 - MiniGit + `AGENTS.md` only when the **ticket** requires product code
 - Optional samples under `docs/examples/` (e.g. Merge) — not in the loop
+- Ticket run scratch under `agent_space/<KEY>/` — not product `docs/`
 
 ## Key Assumptions
 - [ ] BLRID allows `sdlc:*` labels

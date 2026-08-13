@@ -11,6 +11,7 @@ Copy-friendly runbook. Keep this open while you connect Jira and trigger the fac
 - [ ] Cursor open on the MiniGit repo
 - [ ] Skills visible under `.cursor/skills/` (symlinks to `Skills/`)
 - [ ] Atlassian account with access to project **BLRID**
+- [ ] `gh` authenticated for PRs (branch pattern `aiagent/<ISSUE-KEY>`)
 - [ ] Jira API token (or OAuth) ready — **do not commit tokens; do not paste them into chat**
 
 Smoke-test the registry anytime:
@@ -82,11 +83,20 @@ Complete the browser sign-in when Cursor prompts.
 3. Fill summary + description / acceptance criteria (agents derive scope from this).
 4. Copy the issue key, e.g. `BLRID-123`.
 
-You do **not** need `sdlc:*` labels beforehand; the loop adds them as phases pass.
+You do **not** need labels beforehand; the loop adds them as phases pass. If labels already exist, the loop **resumes** at the next phase.
 
-**Suggested labels the factory will accumulate:**  
+**Progress labels:**  
 `sdlc:ideate` → `sdlc:spec` → `sdlc:plan` → `sdlc:implement` → `sdlc:test` → `sdlc:review` → `sdlc:done`  
 (plus `sdlc:blocked` on escalate)
+
+**Gate labels you will use:**
+
+| Label | Who sets | Meaning |
+|-------|----------|---------|
+| `aiagent-ready` | Agent (after ideate+spec+plan) | Ready for human plan review; status → **In Progress** |
+| `human-approved` | **You** (or comment `approved`) | Unblock maker / acknowledge gate |
+| `aiagent-approved` | Agent (after PR opened) | Implementation ready for your PR review |
+| `aiagent-need-review-stage` | **You** | Ask agent to incorporate review feedback (agent clears stale `human-approved` / `aiagent-approved` for you) |
 
 ---
 
@@ -97,11 +107,15 @@ Paste (edit the key):
 ```text
 Use the sdlc-loop skill on BLRID-123 in supervised mode.
 
+- Resume from existing sdlc:* / aiagent-* labels (do not restart finished phases).
 - Read the Jira issue as the only source of feature scope.
-- Run the AI SDLC inner loop (idea → spec → plan → implement → test → review).
-- Update BLRID via jira-phase-gate after each rubric pass (accumulate sdlc:* labels; do not remove prior ones).
-- Stop for me only on: PLAN GATE, ESCALATE, or VERDICT.
-- Maker and checker must be separate passes.
+- Flag duplicate tickets and already-covered code early.
+- After ideate+spec+plan: aiagent-ready + status In Progress; stop for HUMAN GATE.
+- Implement only when aiagent-ready and human-approved are present.
+- PR branch: aiagent/BLRID-123; set aiagent-approved when ready.
+- After I approve the PR: status Review; checker adds inline comments.
+- If I add aiagent-need-review-stage, incorporate that feedback.
+- Stop for me on: HUMAN GATE, ESCALATE, VERDICT, or missing gates.
 ```
 
 Optional teaching mode (you approve every phase):
@@ -116,11 +130,11 @@ Same as above, but autonomy=interactive (pause after each phase).
 
 | Packet | When | Your action |
 |--------|------|-------------|
-| **PLAN GATE** | After plan/todo exist | `yes` / change X / `stop` |
+| **HUMAN GATE (plan)** | After `aiagent-ready` | Add `human-approved` **or** comment `approved` / change X / `stop` |
+| **HUMAN GATE (PR)** | After `aiagent-approved` + PR | Review PR; approve → agent moves status to **Review** |
+| **Feedback** | Anytime in review | Add `aiagent-need-review-stage` + comments; re-run loop. **You do not remove** `human-approved` — the agent does. Re-approve when satisfied. |
 | **ESCALATE** | Failure, ask-first, Critical, MCP down | redirect / fix constraint / abort |
 | **VERDICT** | After checker review | `ship` / `block` / `redirect` / `narrow` |
-
-You should **not** be asked “should I do the next implement task?” in supervised mode.
 
 On **ship**, the harness accumulates `sdlc:done`.
 
@@ -131,8 +145,11 @@ On **ship**, the harness accumulates `sdlc:done`.
 On the Jira issue, confirm:
 
 - [ ] Evidence **comments** for completed phases
-- [ ] Accumulated **`sdlc:*` labels** (fingerprint of progress)
-- [ ] Repo artifacts as appropriate (`docs/ideas/`, `docs/specs/`, `tasks/`, code/tests if the ticket required them)
+- [ ] Accumulated **`sdlc:*`** and gate labels
+- [ ] Status moved to **In Progress** at ready gate; **Review** after PR approval (if workflow allows)
+- [ ] PR on branch `aiagent/<KEY>`
+- [ ] Repo artifacts under `agent_space/<KEY>/` (ideas, specs, tasks, reviews) — not under product `docs/`
+- [ ] Product code/tests only if the ticket required them (`src/`, `tests/`)
 
 Local registry still healthy:
 
@@ -153,9 +170,11 @@ make check
 | Symptom | What to do |
 |---------|------------|
 | Agent says no Atlassian/Jira tools | Fix `~/.cursor/mcp.json`; restart/toggle MCP; confirm auth |
-| Labels not applied | Check MCP write permission on BLRID; agent must use `jira-phase-gate` only after rubric pass |
-| Agent asks every step | Remind: supervised `sdlc-loop`; only PLAN / ESCALATE / VERDICT |
-| Agent invents a feature | Remind: scope = this issue only; no hardcoded demo features |
+| Agent restarts from ideate | Remind: resume from labels |
+| Maker starts without approval | Remind: need `aiagent-ready` + `human-approved` |
+| Labels not applied | Check MCP write permission; use `jira-phase-gate` after rubric pass |
+| Status not Review | Workflow may lack Review; check agent comment for alias miss |
+| Agent invents a feature | Remind: scope = this issue only |
 | Skills not found | `ls -la .cursor/skills/`; should symlink to `../../Skills/...` |
 
 ---
@@ -166,8 +185,8 @@ make check
 1. ~/.cursor/mcp.json → Atlassian MCP connected
 2. BLRID-XXX ticket with clear AC
 3. Cursor: “Use sdlc-loop on BLRID-XXX (supervised)”
-4. You: PLAN GATE → (agents work) → ESCALATE if needed → VERDICT
-5. Check Jira comments + sdlc:* labels
+4. You: human-approved after aiagent-ready → review PR → optional aiagent-need-review-stage → VERDICT
+5. Check Jira labels/status + PR aiagent/BLRID-XXX
 ```
 
 Optional sample feature narrative (not required to run): [docs/examples/merge/](../examples/merge/).

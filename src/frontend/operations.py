@@ -34,6 +34,9 @@ class Operations:
             db_path = os.path.join(repo_path, ".minigit", "minigit.db")
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db: SQLiteClient = SQLiteClient(db_path)
+        head = self.db.get_ref("HEAD")
+        if head:
+            self.branch = head
 
     def init_repo(self, author: str | None = None, message: str | None = None) -> str:
         """Initialize a new repository with an initial commit.
@@ -92,6 +95,7 @@ class Operations:
             raise ValueError(f"Current branch '{self.branch}' has no commits")
         self.db.set_ref(branch_name, commit_hash)
         self.branch = branch_name
+        self.db.set_ref("HEAD", branch_name)
         return branch_name
 
     def checkout_branch(self, branch_name: str) -> str:
@@ -100,6 +104,7 @@ class Operations:
         if not commit_hash:
             raise ValueError(f"Branch '{branch_name}' does not exist")
         self.branch = branch_name
+        self.db.set_ref("HEAD", branch_name)
         return branch_name
 
     def get_all_branches(self) -> list[dict[str, str]]:
@@ -304,6 +309,17 @@ class Operations:
                 ),
             })
         return diffs
+
+    def merge(
+        self,
+        source_ref: str,
+        author: str | None = None,
+        message: str | None = None,
+    ) -> str:
+        """Merge source_ref into the current branch. Returns resulting tip hash."""
+        from frontend.merge import merge_branch
+
+        return merge_branch(self, source_ref, author=author, message=message)
 
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""

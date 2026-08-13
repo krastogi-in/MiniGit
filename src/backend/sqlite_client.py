@@ -80,6 +80,17 @@ class SQLiteClient:
             );
         """)
         self.conn.commit()
+        self._migrate_second_parent_column()
+
+    def _migrate_second_parent_column(self) -> None:
+        """Add second_parent_hash for merge commits if missing (additive)."""
+        self.cursor.execute("PRAGMA table_info(commits)")
+        columns = {row[1] for row in self.cursor.fetchall()}
+        if "second_parent_hash" not in columns:
+            self.cursor.execute(
+                "ALTER TABLE commits ADD COLUMN second_parent_hash TEXT"
+            )
+            self.conn.commit()
 
     def store_blob(self, hash: str, data: str) -> None:
         """Persist a blob by its hash. Ignores duplicates."""
@@ -124,20 +135,31 @@ class SQLiteClient:
         author: str,
         message: str,
         timestamp: str,
+        second_parent_hash: str | None = None,
     ) -> None:
         """Persist a commit object. Validates all fields before insert."""
         _validate_hash(hash, "commit hash")
         _validate_hash(tree_hash, "tree hash")
         if parent_hash is not None:
             _validate_hash(parent_hash, "parent hash")
+        if second_parent_hash is not None:
+            _validate_hash(second_parent_hash, "second parent hash")
         _validate_str(author, "author", max_len=200)
         _validate_str(message, "commit message", max_len=5000)
         _validate_str(timestamp, "timestamp", max_len=50)
         self.cursor.execute(
             "INSERT OR IGNORE INTO commits "
-            "(hash, tree_hash, parent_hash, author, message, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (hash, tree_hash, parent_hash, author, message, timestamp),
+            "(hash, tree_hash, parent_hash, second_parent_hash, author, message, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                hash,
+                tree_hash,
+                parent_hash,
+                second_parent_hash,
+                author,
+                message,
+                timestamp,
+            ),
         )
         self.conn.commit()
         logger.info("stored_commit", hash=hash[:8], message=message)

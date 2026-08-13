@@ -300,6 +300,25 @@ def new_branch(repo_name: str) -> Any:
     return redirect(url_for("repo_detail", repo_name=repo_name))
 
 
+@app.route("/repo/<repo_name>/merge", methods=["POST"])
+def merge_branch_view(repo_name: str) -> Any:
+    """Merge a source branch into the selected target branch."""
+    from frontend.merge import MergeConflictError
+
+    ops = get_ops(repo_name)
+    source = request.form.get("source", "").strip()
+    into = request.form.get("into", "main").strip() or "main"
+    try:
+        ops.checkout_branch(into)
+        tip = ops.merge(source)
+        flash(f"Merged '{source}' into '{into}' at {tip[:8]}", "success")
+    except MergeConflictError as e:
+        flash(f"{e} — merge aborted; tip unchanged.", "error")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("repo_detail", repo_name=repo_name, branch=into))
+
+
 @app.route("/repo/<repo_name>/working-dir")
 def working_dir(repo_name: str) -> str:
     """Render the working directory browser with staging status."""

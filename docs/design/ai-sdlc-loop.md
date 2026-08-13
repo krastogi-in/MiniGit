@@ -19,7 +19,7 @@ Feature design is **not** hardcoded in skills; it emerges from the ticket via id
 
 | Primitive ([Addy](https://skills.addy.ie/loops/)) | This factory |
 |--------------------------------------------------|--------------|
-| Skills | `Skills/*` |
+| Skills | `skills/*` |
 | Connectors | Atlassian MCP → Jira; GitHub CLI → PR `aiagent/<KEY>` |
 | Subagents | Maker ≠ Checker |
 | State | Jira labels/comments/status; `agent_space/<KEY>/` run artifacts |

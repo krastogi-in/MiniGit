@@ -6,7 +6,7 @@ MiniGit is an educational Git clone in Python. It implements content-addressable
 storage (blobs, trees, commits) backed by SQLite, exposed via a CLI and Flask web UI.
 
 For the **AI SDLC skills factory** (ticket-driven loop, any Jira feature), see
-`docs/ai-sdlc/README.md` and `Skills/REGISTRY.md`. This file is only for coding
+`docs/ai-sdlc/README.md` and `skills/REGISTRY.md`. This file is only for coding
 the MiniGit **product**.
 
 ## Architecture

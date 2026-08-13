@@ -2,14 +2,14 @@
 
 Copy-friendly runbook. Keep this open while you connect Jira and trigger the factory.
 
-**Factory overview:** [README.md](README.md) · **Loop design:** [../design/ai-sdlc-loop.md](../design/ai-sdlc-loop.md) · **Skills:** [../../Skills/REGISTRY.md](../../Skills/REGISTRY.md)
+**Factory overview:** [README.md](README.md) · **Loop design:** [../design/ai-sdlc-loop.md](../design/ai-sdlc-loop.md) · **Skills:** [../../skills/REGISTRY.md](../../skills/REGISTRY.md)
 
 ---
 
 ## Prerequisites
 
 - [ ] Cursor open on the MiniGit repo
-- [ ] Skills visible under `.cursor/skills/` (symlinks to `Skills/`)
+- [ ] Skills visible under `.cursor/skills/` (symlinks to `skills/`)
 - [ ] Atlassian account with access to project **BLRID**
 - [ ] `gh` authenticated for PRs (branch pattern `aiagent/<ISSUE-KEY>`)
 - [ ] Jira API token (or OAuth) ready — **do not commit tokens; do not paste them into chat**
@@ -175,7 +175,7 @@ make check
 | Labels not applied | Check MCP write permission; use `jira-phase-gate` after rubric pass |
 | Status not Review | Workflow may lack Review; check agent comment for alias miss |
 | Agent invents a feature | Remind: scope = this issue only |
-| Skills not found | `ls -la .cursor/skills/`; should symlink to `../../Skills/...` |
+| Skills not found | `ls -la .cursor/skills/`; should symlink to `../../skills/...` |
 
 ---
 

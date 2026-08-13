@@ -11,6 +11,7 @@ Usage:
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit merge <branch>              Merge branch into current
     minigit serve                       Start the web UI
 """
 
@@ -73,6 +74,9 @@ def cmd_log(args: argparse.Namespace) -> None:
         print(f"\033[33mcommit {commit['hash']}\033[0m")
         if commit["parent_hash"]:
             print(f"parent {commit['parent_hash'][:8]}")
+        second = commit.get("second_parent_hash")
+        if second:
+            print(f"parent {second[:8]}")
         print(f"Author: {commit['author']}")
         print(f"Date:   {commit['timestamp']}")
         print(f"\n    {commit['message']}\n")
@@ -115,6 +119,9 @@ def cmd_show(args: argparse.Namespace) -> None:
     print(f"tree   {commit['tree_hash'][:8]}")
     if commit["parent_hash"]:
         print(f"parent {commit['parent_hash'][:8]}")
+    second = commit.get("second_parent_hash")
+    if second:
+        print(f"parent {second[:8]}")
     print(f"Author: {commit['author']}")
     print(f"Date:   {commit['timestamp']}")
     print(f"\n    {commit['message']}\n")
@@ -173,6 +180,28 @@ def cmd_cat(args: argparse.Namespace) -> None:
     print(content)
 
 
+def cmd_merge(args: argparse.Namespace) -> None:
+    """Handle the 'merge' subcommand — merge source branch into current."""
+    from frontend.merge import MergeConflictError
+
+    ops = get_ops(args)
+    tip_before = ops.db.get_ref(ops.branch)
+    try:
+        tip = ops.merge(args.source, author=args.author, message=args.message)
+        if tip == tip_before:
+            print("Already up to date.")
+        else:
+            print(f"Merged '{args.source}' into '{ops.branch}'")
+            print(f"Tip: {tip}")
+    except MergeConflictError as e:
+        print(f"Error: {e}")
+        print("Merge aborted; branch tip unchanged.")
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
@@ -216,6 +245,11 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
+    p_merge = sub.add_parser("merge", help="Merge a branch into the current branch")
+    p_merge.add_argument("source", help="Source branch name")
+    p_merge.add_argument("--author", default=None)
+    p_merge.add_argument("-m", "--message", default=None)
+
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
@@ -229,6 +263,7 @@ def main() -> None:
         "diff": cmd_diff,
         "ls": cmd_ls,
         "cat": cmd_cat,
+        "merge": cmd_merge,
         "serve": cmd_serve,
     }
     commands[args.command](args)

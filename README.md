@@ -2,6 +2,10 @@
 
 A simplified Git clone built from scratch in Python. Implements content-addressable storage, tree structures, commit history, branching, and diffs.
 
+## Also in this repo: AI SDLC factory
+
+Alongside the MiniGit app there is a **ticket-driven AI SDLC skills registry** (Cursor skills + loop). Humans stay on the outer loop; agents process **any** Jira issue. Start here: **[docs/ai-sdlc/README.md](docs/ai-sdlc/README.md)**. To connect Jira and run a loop: **[docs/ai-sdlc/HOW-TO-EXECUTE.md](docs/ai-sdlc/HOW-TO-EXECUTE.md)**. Product coding conventions for agents remain in **[AGENTS.md](AGENTS.md)**.
+
 ## Architecture
 
 ```
@@ -18,8 +22,12 @@ MiniGit/
 │   ├── app.py              # Flask web UI
 │   ├── cli.py              # Command-line interface
 │   └── templates/          # HTML templates for web UI
-├── tests/                  # Test suite (69 tests)
+├── Skills/                 # AI SDLC factory (feature-agnostic)
+├── evals/                  # Skill registry evals + rubrics
+├── tests/                  # Test suite
 ├── docs/
+│   ├── ai-sdlc/           # What the factory is / how to run
+│   ├── examples/          # Optional sample features (not the loop)
 │   ├── adr/               # Architecture Decision Records
 │   ├── design/            # Design documentation
 │   └── openapi.yaml       # API specification
@@ -48,6 +56,9 @@ make setup
 
 # Run all quality checks (lint + typecheck + tests)
 make check
+
+# AI SDLC registry smoke test
+make eval-skills
 ```
 
 ## Setup (Manual)

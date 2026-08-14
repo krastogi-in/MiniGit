@@ -253,3 +253,76 @@ class TestOperations:
         ops.create_new_commit("commit", author="Tester")
         staged = ops.db.get_staged()
         assert len(staged) == 0
+
+    def test_create_tag_at_head(self) -> None:
+        """create_tag at HEAD stores a tag ref and returns the commit hash."""
+        ops = self._init_ops()
+        head = ops.db.get_ref("main")
+        assert head is not None
+        tagged = ops.create_tag("v1.0.0")
+        assert tagged == head
+        tags = ops.list_tags()
+        assert len(tags) == 1
+        assert tags[0]["name"] == "v1.0.0"
+        assert tags[0]["commit_hash"] == head
+
+    def test_create_tag_at_specific_commit(self) -> None:
+        """create_tag can point to an explicit commit hash."""
+        ops = self._init_ops()
+        history = ops.get_commit_history()
+        initial = history[0]["hash"]
+        ops.create_tag("v0.9.0", initial)
+        tags = ops.list_tags()
+        assert tags[0]["commit_hash"] == initial
+
+    def test_create_duplicate_tag_fails(self) -> None:
+        """Creating the same tag twice raises ValueError."""
+        ops = self._init_ops()
+        ops.create_tag("v1.0.0")
+        try:
+            ops.create_tag("v1.0.0")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+    def test_create_tag_missing_commit_fails(self) -> None:
+        """Tagging a nonexistent commit raises ValueError."""
+        ops = self._init_ops()
+        missing = "a" * 64
+        try:
+            ops.create_tag("v1.0.0", missing)
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+    def test_delete_tag(self) -> None:
+        """delete_tag removes the tag ref."""
+        ops = self._init_ops()
+        ops.create_tag("v1.0.0")
+        ops.delete_tag("v1.0.0")
+        assert ops.list_tags() == []
+
+    def test_delete_missing_tag_fails(self) -> None:
+        """Deleting a missing tag raises ValueError."""
+        ops = self._init_ops()
+        try:
+            ops.delete_tag("missing")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+    def test_tags_excluded_from_branches(self) -> None:
+        """Tags do not appear in get_all_branches output."""
+        ops = self._init_ops()
+        ops.create_tag("v1.0.0")
+        names = [b["name"] for b in ops.get_all_branches()]
+        assert "v1.0.0" not in names
+        assert "tags/v1.0.0" not in names
+
+    def test_resolve_ref_by_tag(self) -> None:
+        """resolve_ref returns the commit hash for a tag name."""
+        ops = self._init_ops()
+        head = ops.db.get_ref("main")
+        assert head is not None
+        ops.create_tag("release", head)
+        assert ops.resolve_ref("release") == head

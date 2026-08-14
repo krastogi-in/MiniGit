@@ -248,6 +248,18 @@ def commit_history(repo_name: str) -> str:
     )
 
 
+@app.route("/repo/<repo_name>/graph")
+def commit_graph(repo_name: str) -> str:
+    """Render an SVG commit graph with branch lanes and parent links."""
+    ops = get_ops(repo_name)
+    graph = ops.get_commit_graph_data()
+    return render_template(
+        "commit_graph.html",
+        repo_name=repo_name,
+        graph=graph,
+    )
+
+
 @app.route("/repo/<repo_name>/commit/<commit_hash>")
 def commit_detail(repo_name: str, commit_hash: str) -> str | Any:
     """Render commit detail page with metadata and file diffs."""

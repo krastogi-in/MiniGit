@@ -356,6 +356,18 @@ def stage_delete(repo_name: str) -> Any:
     return redirect(url_for("working_dir", repo_name=repo_name))
 
 
+@app.route("/repo/<repo_name>/revert/<commit_hash>", methods=["POST"])
+def revert_commit_route(repo_name: str, commit_hash: str) -> Any:
+    """Revert a commit on the repository's current branch."""
+    ops = get_ops(repo_name)
+    try:
+        new_hash = ops.revert_commit(commit_hash)
+        flash(f"Reverted commit {commit_hash[:8]} → {new_hash[:8]}", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("repo_detail", repo_name=repo_name))
+
+
 @app.route("/repo/<repo_name>/commit", methods=["POST"])
 def create_commit(repo_name: str) -> Any:
     """Handle commit creation form submission."""

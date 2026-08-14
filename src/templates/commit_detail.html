@@ -27,6 +27,11 @@
             &middot; <em>initial commit</em>
             {% endif %}
         </div>
+        {% if commit.parent_hash %}
+        <form method="POST" action="/repo/{{ repo_name }}/revert/{{ commit.hash }}" style="margin-top: 12px;">
+            <button type="submit" class="btn">Revert this commit</button>
+        </form>
+        {% endif %}
     </div>
 </div>
 

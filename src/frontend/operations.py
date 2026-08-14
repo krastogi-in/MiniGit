@@ -191,6 +191,98 @@ class Operations:
         logger.info("commit_created", hash=commit_hash[:8], message=message)
         return commit_hash
 
+    def revert_commit(self, commit_hash: str, author: str | None = None) -> str:
+        """Revert a commit on the current branch by undoing its changes on HEAD.
+
+        Applies the inverse of the target commit's diff against its parent onto
+        the current branch tip. Raises ValueError for root commits, unknown
+        hashes, or revert conflicts.
+        """
+        target = self.db.get_commit(commit_hash)
+        if not target:
+            raise ValueError(f"Commit not found: {commit_hash}")
+
+        parent_hash = target["parent_hash"]
+        if not parent_hash:
+            raise ValueError("Cannot revert root commit")
+
+        head_hash = self.db.get_ref(self.branch)
+        if not head_hash:
+            raise ValueError("No commits on current branch")
+        head = self.db.get_commit(head_hash)
+        if not head:
+            raise ValueError("HEAD commit not found")
+
+        parent_commit = self.db.get_commit(parent_hash)
+        if not parent_commit:
+            raise ValueError("Parent commit not found")
+
+        parent_files = self._flatten_tree(parent_commit["tree_hash"])
+        target_files = self._flatten_tree(target["tree_hash"])
+        head_files = dict(self._flatten_tree(head["tree_hash"]))
+        self._apply_revert_patch(head_files, parent_files, target_files)
+
+        root_tree_hash = self._build_tree_from_flat(head_files)
+        if author is None:
+            author = os.getenv("USER", "unknown")
+        message = f'Revert "{target["message"]}"'
+
+        commit_obj = Commit(
+            self.repo_path,
+            parent_commit_pointer=head_hash,
+            author=author,
+            message=message,
+        )
+        new_hash = commit_obj.get_hash()
+        self.db.store_commit(
+            new_hash,
+            root_tree_hash,
+            head_hash,
+            commit_obj.author,
+            commit_obj.message,
+            commit_obj.timestamp,
+        )
+        self.db.set_ref(self.branch, new_hash)
+        self.db.clear_staging()
+        logger.info(
+            "commit_reverted",
+            reverted=commit_hash[:8],
+            new=new_hash[:8],
+        )
+        return new_hash
+
+    def _apply_revert_patch(
+        self,
+        head_files: dict[str, str],
+        parent_files: dict[str, str],
+        target_files: dict[str, str],
+    ) -> None:
+        """Mutate *head_files* to undo changes introduced by target vs parent."""
+        changed_paths = set(parent_files.keys()) | set(target_files.keys())
+        for path in changed_paths:
+            parent_blob = parent_files.get(path)
+            target_blob = target_files.get(path)
+            if parent_blob == target_blob:
+                continue
+            if target_blob is None:
+                if parent_blob is None:
+                    continue
+                if path in head_files and head_files[path] != parent_blob:
+                    raise ValueError(f"Revert conflict: {path}")
+                head_files[path] = parent_blob
+            elif parent_blob is None:
+                if path not in head_files:
+                    continue
+                if head_files[path] != target_blob:
+                    raise ValueError(f"Revert conflict: {path}")
+                del head_files[path]
+            else:
+                if path not in head_files:
+                    raise ValueError(f"Revert conflict: {path}")
+                if head_files[path] != target_blob:
+                    raise ValueError(f"Revert conflict: {path}")
+                head_files[path] = parent_blob
+
     def _build_tree_from_flat(self, flat_files: dict[str, str]) -> str:
         """Build nested tree objects from a flat {path: blob_hash} dict. Returns root hash."""
         root: dict[str, Any] = {}

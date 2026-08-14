@@ -8,7 +8,7 @@ Alongside the MiniGit app there is a **ticket-driven AI SDLC skills registry** (
 
 ## Architecture
 
-```
+``
 MiniGit/
 ├── src/
 │   ├── components/         # Core git objects
@@ -46,7 +46,7 @@ MiniGit mirrors real Git's object model:
 - **Commits** point to a root tree + parent commit + metadata, also hashed
 - **Refs** (branches) are name-to-commit-hash mappings
 
-Every commit is a full snapshot. Unchanged files share the same blob across commits. Diffs are computed on-the-fly by comparing two commit trees.
+Every commit is a full snapshot. Unchanged files reuse the same blob across commits, and diffs are computed on-the-fly by comparing commit trees.
 
 ## Quick Start
 

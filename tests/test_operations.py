@@ -4,6 +4,8 @@ import os
 import shutil
 import tempfile
 
+import pytest
+
 from frontend.operations import Operations
 
 
@@ -30,6 +32,21 @@ class TestOperations:
         ops = Operations(self.tmpdir, self.db_path)
         ops.init_repo(author="Tester", message="Initial commit")
         return ops
+
+    def _write_file(self, relative_path: str, content: str) -> None:
+        """Write *content* into a repo-relative file."""
+        full_path = os.path.join(self.tmpdir, relative_path)
+        parent = os.path.dirname(full_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(full_path, "w") as f:
+            f.write(content)
+
+    def _commit_file(self, ops: Operations, relative_path: str, content: str, message: str) -> str:
+        """Update a file and commit it on the current branch."""
+        self._write_file(relative_path, content)
+        ops.add(relative_path)
+        return ops.create_new_commit(message, author="Tester")
 
     def test_init_creates_db(self) -> None:
         """init_repo creates the .minigit database file."""
@@ -97,11 +114,8 @@ class TestOperations:
     def test_create_duplicate_branch_fails(self) -> None:
         """Creating a branch that already exists raises ValueError."""
         ops = self._init_ops()
-        try:
+        with pytest.raises(ValueError):
             ops.create_branch("main")
-            assert False, "Should have raised ValueError"
-        except ValueError:
-            pass
 
     def test_checkout_branch(self) -> None:
         """checkout_branch switches the active branch."""
@@ -109,15 +123,14 @@ class TestOperations:
         ops.create_branch("dev")
         ops.checkout_branch("dev")
         assert ops.branch == "dev"
+        reopened = Operations(self.tmpdir, self.db_path)
+        assert reopened.branch == "dev"
 
     def test_checkout_nonexistent_fails(self) -> None:
         """Checking out a nonexistent branch raises ValueError."""
         ops = self._init_ops()
-        try:
+        with pytest.raises(ValueError):
             ops.checkout_branch("nonexistent")
-            assert False, "Should have raised ValueError"
-        except ValueError:
-            pass
 
     def test_delete_branch(self) -> None:
         """delete_branch removes the branch ref."""
@@ -131,11 +144,8 @@ class TestOperations:
     def test_delete_main_fails(self) -> None:
         """Deleting 'main' branch raises ValueError."""
         ops = self._init_ops()
-        try:
+        with pytest.raises(ValueError):
             ops.delete_branch("main")
-            assert False, "Should have raised ValueError"
-        except ValueError:
-            pass
 
     def test_flatten_tree(self) -> None:
         """_flatten_tree returns all file paths recursively."""
@@ -166,11 +176,8 @@ class TestOperations:
     def test_add_nonexistent_file_fails(self) -> None:
         """Adding a nonexistent file raises FileNotFoundError."""
         ops = self._init_ops()
-        try:
+        with pytest.raises(FileNotFoundError):
             ops.add("nonexistent.txt")
-            assert False, "Should have raised FileNotFoundError"
-        except FileNotFoundError:
-            pass
 
     def test_delete_stages_removal(self) -> None:
         """delete_file() stages a deletion entry."""
@@ -183,11 +190,8 @@ class TestOperations:
     def test_delete_untracked_file_fails(self) -> None:
         """Deleting an untracked file raises FileNotFoundError."""
         ops = self._init_ops()
-        try:
+        with pytest.raises(FileNotFoundError):
             ops.delete_file("not_tracked.txt")
-            assert False, "Should have raised FileNotFoundError"
-        except FileNotFoundError:
-            pass
 
     def test_create_new_commit(self) -> None:
         """create_new_commit returns a valid commit hash."""
@@ -227,11 +231,8 @@ class TestOperations:
     def test_commit_nothing_staged_fails(self) -> None:
         """Committing with nothing staged raises ValueError."""
         ops = self._init_ops()
-        try:
+        with pytest.raises(ValueError):
             ops.create_new_commit("empty commit")
-            assert False, "Should have raised ValueError"
-        except ValueError:
-            pass
 
     def test_delete_file_removes_from_tree(self) -> None:
         """Deleted file is absent from the new commit's tree."""
@@ -253,3 +254,70 @@ class TestOperations:
         ops.create_new_commit("commit", author="Tester")
         staged = ops.db.get_staged()
         assert len(staged) == 0
+
+    def test_rebase_replays_feature_commits_onto_target_branch(self) -> None:
+        """rebase_branch replays unique commits onto the target branch tip."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        self._commit_file(ops, "README.md", "# Main branch\n", "main change")
+        main_head = ops.get_commit_history()[0]["hash"]
+
+        ops.checkout_branch("feature")
+        feature_ops = Operations(self.tmpdir, self.db_path)
+        feature_head_before = feature_ops.get_commit_history()[0]["hash"]
+        self._commit_file(
+            feature_ops,
+            "src/main.py",
+            "print('feature branch')\n",
+            "feature change",
+        )
+
+        result = feature_ops.rebase_branch("main")
+
+        assert result["status"] == "rebased"
+        assert result["replayed"] == 1
+        assert result["skipped"] == 0
+        history = feature_ops.get_commit_history()
+        assert history[0]["message"] == "feature change"
+        assert history[0]["parent_hash"] == main_head
+        assert history[1]["message"] == "main change"
+        assert history[0]["hash"] != feature_head_before
+
+        flat = feature_ops._flatten_tree(history[0]["tree_hash"])
+        readme_hash = flat["README.md"]
+        main_hash = flat["src/main.py"]
+        assert feature_ops.get_blob_content(readme_hash) == "# Main branch\n"
+        assert feature_ops.get_blob_content(main_hash) == "print('feature branch')\n"
+
+    def test_rebase_fast_forwards_branch_without_unique_commits(self) -> None:
+        """rebase_branch fast-forwards when the current branch has no unique commits."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        self._commit_file(ops, "README.md", "# Main branch\n", "main change")
+        main_head = ops.get_commit_history()[0]["hash"]
+
+        ops.checkout_branch("feature")
+        feature_ops = Operations(self.tmpdir, self.db_path)
+        result = feature_ops.rebase_branch("main")
+
+        assert result["status"] == "fast_forward"
+        assert result["head"] == main_head
+        assert feature_ops.get_commit_history()[0]["hash"] == main_head
+
+    def test_rebase_aborts_on_conflicting_changes(self) -> None:
+        """rebase_branch refuses to replay a commit that conflicts with the target."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        self._commit_file(ops, "README.md", "# Main branch\n", "main change")
+
+        ops.checkout_branch("feature")
+        feature_ops = Operations(self.tmpdir, self.db_path)
+        feature_head_before = feature_ops.get_commit_history()[0]["hash"]
+        self._commit_file(feature_ops, "README.md", "# Feature branch\n", "feature change")
+        feature_head = feature_ops.get_commit_history()[0]["hash"]
+
+        with pytest.raises(ValueError, match="Cannot safely replay changes"):
+            feature_ops.rebase_branch("main")
+
+        assert feature_ops.get_commit_history()[0]["hash"] == feature_head
+        assert feature_head != feature_head_before

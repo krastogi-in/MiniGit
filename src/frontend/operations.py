@@ -305,6 +305,40 @@ class Operations:
             })
         return diffs
 
+    def add_review_comment(
+        self,
+        base_hash: str,
+        head_hash: str,
+        file_path: str,
+        line_number: int,
+        body: str,
+        author: str | None = None,
+    ) -> dict[str, Any]:
+        """Add a line-anchored review comment on a commit diff."""
+        if author is None:
+            author = os.getenv("USER", "reviewer")
+        comment_id = self.db.insert_review_comment(
+            base_hash, head_hash, file_path, line_number, author, body
+        )
+        comment = self.db.get_review_comment(comment_id)
+        assert comment is not None
+        return comment
+
+    def list_review_comments(
+        self,
+        base_hash: str,
+        head_hash: str,
+        status: str = "open",
+    ) -> list[dict[str, Any]]:
+        """List review comments for a commit pair."""
+        if status not in ("open", "addressed", "all"):
+            raise ValueError(f"Invalid status: {status!r}")
+        return self.db.list_review_comments(base_hash, head_hash, status)  # type: ignore[arg-type]
+
+    def address_review_comment(self, comment_id: int) -> dict[str, Any]:
+        """Mark a review comment as addressed."""
+        return self.db.address_review_comment(comment_id)
+
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""
         entries_json = self.db.get_tree(tree_hash)

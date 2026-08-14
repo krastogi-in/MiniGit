@@ -9,6 +9,9 @@ Usage:
     minigit checkout <branch>           Switch to a branch
     minigit show <hash>                 Show commit details
     minigit diff <hash1> <hash2>        Diff two commits
+    minigit comment add <base> <head> <path> <line> -m <body>
+    minigit comment list <base> <head> [--status open|addressed|all]
+    minigit comment address <id>        Mark a review comment addressed
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
     minigit serve                       Start the web UI
@@ -145,6 +148,54 @@ def cmd_diff(args: argparse.Namespace) -> None:
                 print(line)
 
 
+def cmd_comment_add(args: argparse.Namespace) -> None:
+    """Handle 'comment add' — add a review comment on a diff line."""
+    ops = get_ops(args)
+    try:
+        comment = ops.add_review_comment(
+            args.base_hash,
+            args.head_hash,
+            args.path,
+            args.line,
+            args.message,
+            author=args.author,
+        )
+        print(f"Comment {comment['id']} added on {args.path}:{args.line}")
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
+def cmd_comment_list(args: argparse.Namespace) -> None:
+    """Handle 'comment list' — list review comments for a commit pair."""
+    ops = get_ops(args)
+    try:
+        comments = ops.list_review_comments(args.base_hash, args.head_hash, args.status)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    if not comments:
+        print("No comments.")
+        return
+    for c in comments:
+        status = c["status"]
+        print(
+            f"[{c['id']}] {status} {c['file_path']}:{c['line_number']} "
+            f"({c['author']}) {c['body']}"
+        )
+
+
+def cmd_comment_address(args: argparse.Namespace) -> None:
+    """Handle 'comment address' — mark a review comment as addressed."""
+    ops = get_ops(args)
+    try:
+        comment = ops.address_review_comment(args.comment_id)
+        print(f"Comment {comment['id']} addressed")
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
 def cmd_ls(args: argparse.Namespace) -> None:
     """Handle the 'ls' subcommand — list files in a tree."""
     ops = get_ops(args)
@@ -210,6 +261,28 @@ def main() -> None:
     p_diff.add_argument("hash1")
     p_diff.add_argument("hash2")
 
+    p_comment = sub.add_parser("comment", help="Review comments on commit diffs")
+    comment_sub = p_comment.add_subparsers(dest="comment_command")
+    comment_sub.required = True
+
+    p_comment_add = comment_sub.add_parser("add", help="Add a review comment")
+    p_comment_add.add_argument("base_hash")
+    p_comment_add.add_argument("head_hash")
+    p_comment_add.add_argument("path")
+    p_comment_add.add_argument("line", type=int)
+    p_comment_add.add_argument("-m", "--message", required=True)
+    p_comment_add.add_argument("--author", default=None)
+
+    p_comment_list = comment_sub.add_parser("list", help="List review comments")
+    p_comment_list.add_argument("base_hash")
+    p_comment_list.add_argument("head_hash")
+    p_comment_list.add_argument(
+        "--status", choices=["open", "addressed", "all"], default="open"
+    )
+
+    p_comment_address = comment_sub.add_parser("address", help="Address a comment")
+    p_comment_address.add_argument("comment_id", type=int)
+
     p_ls = sub.add_parser("ls", help="List files in a tree")
     p_ls.add_argument("tree_hash", nargs="?", default=None)
 
@@ -220,6 +293,14 @@ def main() -> None:
     p_serve.add_argument("--port", type=int, default=5000)
 
     args = parser.parse_args()
+    if args.command == "comment":
+        comment_commands: dict[str, Any] = {
+            "add": cmd_comment_add,
+            "list": cmd_comment_list,
+            "address": cmd_comment_address,
+        }
+        comment_commands[args.comment_command](args)
+        return
     commands: dict[str, Any] = {
         "init": cmd_init,
         "log": cmd_log,

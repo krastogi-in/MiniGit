@@ -34,6 +34,7 @@
 <div class="card">
     <div class="card-header">
         {{ diffs|length }} file{{ 's' if diffs|length != 1 }} changed
+        &middot; {{ comments|selectattr('status', 'equalto', 'open')|list|length }} open comment{{ 's' if comments|selectattr('status', 'equalto', 'open')|list|length != 1 else '' }}
     </div>
     <div class="card-body padded">
         {% for d in diffs %}
@@ -42,7 +43,8 @@
                 <span class="badge {{ d.status }}">{{ d.status }}</span>
                 &nbsp; {{ d.path }}
             </div>
-            {% for line in d.diff_lines %}
+            {% for entry in d.diff_lines %}
+            {% set line = entry.text %}
             {% if line.startswith('+') and not line.startswith('+++') %}
             <div class="diff-line add">{{ line }}</div>
             {% elif line.startswith('-') and not line.startswith('---') %}
@@ -52,7 +54,31 @@
             {% else %}
             <div class="diff-line">{{ line }}</div>
             {% endif %}
+            {% if entry.line %}
+            {% set line_comments = comment_map.get((d.path, entry.line), []) %}
+            {% for c in line_comments %}
+            <div class="review-comment {{ 'addressed' if c.status == 'addressed' else 'open' }}">
+                <strong>#{{ c.id }}</strong> {{ c.author }}:
+                {{ c.body }}
+                {% if c.status == 'open' %}
+                <form method="post" action="/repo/{{ repo_name }}/comments/{{ c.id }}/address" style="display:inline;">
+                    <input type="hidden" name="commit_hash" value="{{ commit.hash }}">
+                    <button type="submit" class="btn-small">Address</button>
+                </form>
+                {% else %}
+                <span class="meta">(addressed)</span>
+                {% endif %}
+            </div>
             {% endfor %}
+            {% endif %}
+            {% endfor %}
+            <form method="post" action="/repo/{{ repo_name }}/commit/{{ commit.hash }}/comments" class="comment-form">
+                <input type="hidden" name="base_hash" value="{{ base_hash }}">
+                <input type="hidden" name="path" value="{{ d.path }}">
+                <label>Line <input type="number" name="line" min="1" value="1" style="width:4em;"></label>
+                <input type="text" name="body" placeholder="Add review comment..." required style="width:60%;">
+                <button type="submit">Comment</button>
+            </form>
         </div>
         {% endfor %}
     </div>

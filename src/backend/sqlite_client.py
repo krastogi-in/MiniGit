@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import re
 import sqlite3
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Literal
 
 import structlog
 
@@ -78,6 +79,22 @@ class SQLiteClient:
                 action TEXT NOT NULL,
                 blob_hash TEXT
             );
+            CREATE TABLE IF NOT EXISTS review_comments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                base_hash TEXT NOT NULL DEFAULT '',
+                head_hash TEXT NOT NULL,
+                file_path TEXT NOT NULL,
+                line_number INTEGER NOT NULL,
+                author TEXT NOT NULL,
+                body TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'open',
+                created_at TEXT NOT NULL,
+                addressed_at TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_review_comments_pair
+                ON review_comments (base_hash, head_hash, status);
+            CREATE INDEX IF NOT EXISTS idx_review_comments_head_path
+                ON review_comments (head_hash, file_path);
         """)
         self.conn.commit()
 
@@ -209,6 +226,87 @@ class SQLiteClient:
         """Remove all entries from the staging area."""
         self.cursor.execute("DELETE FROM staging")
         self.conn.commit()
+
+    def insert_review_comment(
+        self,
+        base_hash: str,
+        head_hash: str,
+        file_path: str,
+        line_number: int,
+        author: str,
+        body: str,
+    ) -> int:
+        """Insert a review comment and return its id."""
+        if base_hash:
+            _validate_hash(base_hash, "base hash")
+        _validate_hash(head_hash, "head hash")
+        _validate_str(file_path, "file path", max_len=1000)
+        if not isinstance(line_number, int) or line_number < 1:
+            raise ValueError(f"Invalid line_number: expected integer >= 1, got {line_number!r}")
+        _validate_str(author, "author", max_len=200)
+        _validate_str(body, "comment body")
+        if not body.strip():
+            raise ValueError("comment body must not be empty")
+        created_at = datetime.now(timezone.utc).isoformat()
+        self.cursor.execute(
+            "INSERT INTO review_comments "
+            "(base_hash, head_hash, file_path, line_number, author, body, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, 'open', ?)",
+            (base_hash, head_hash, file_path, line_number, author, body, created_at),
+        )
+        self.conn.commit()
+        row_id = self.cursor.lastrowid
+        if row_id is None:
+            raise RuntimeError("Failed to insert review comment")
+        return int(row_id)
+
+    def get_review_comment(self, comment_id: int) -> dict[str, Any] | None:
+        """Return a review comment by id, or None if not found."""
+        if not isinstance(comment_id, int) or comment_id < 1:
+            raise ValueError(f"Invalid comment id: {comment_id!r}")
+        self.cursor.execute("SELECT * FROM review_comments WHERE id = ?", (comment_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def list_review_comments(
+        self,
+        base_hash: str,
+        head_hash: str,
+        status: Literal["open", "addressed", "all"] = "open",
+    ) -> list[dict[str, Any]]:
+        """List review comments for a commit pair, optionally filtered by status."""
+        if base_hash:
+            _validate_hash(base_hash, "base hash")
+        _validate_hash(head_hash, "head hash")
+        if status not in ("open", "addressed", "all"):
+            raise ValueError(f"Invalid status filter: {status!r}")
+        query = (
+            "SELECT * FROM review_comments WHERE base_hash = ? AND head_hash = ?"
+        )
+        params: list[Any] = [base_hash, head_hash]
+        if status != "all":
+            query += " AND status = ?"
+            params.append(status)
+        query += " ORDER BY file_path, line_number, id"
+        self.cursor.execute(query, params)
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def address_review_comment(self, comment_id: int) -> dict[str, Any]:
+        """Mark a review comment as addressed. Raises ValueError if not found or done."""
+        comment = self.get_review_comment(comment_id)
+        if comment is None:
+            raise ValueError(f"Comment {comment_id} not found")
+        if comment["status"] == "addressed":
+            raise ValueError(f"Comment {comment_id} is already addressed")
+        addressed_at = datetime.now(timezone.utc).isoformat()
+        self.cursor.execute(
+            "UPDATE review_comments SET status = 'addressed', addressed_at = ? WHERE id = ?",
+            (addressed_at, comment_id),
+        )
+        self.conn.commit()
+        updated = self.get_review_comment(comment_id)
+        assert updated is not None
+        return updated
 
     def close(self) -> None:
         """Close the database connection."""

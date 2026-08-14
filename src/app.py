@@ -248,6 +248,24 @@ def commit_history(repo_name: str) -> str:
     )
 
 
+def _annotate_diff_lines(diff_lines: list[str]) -> list[dict[str, Any]]:
+    """Attach new-file line numbers to unified diff lines for comment anchoring."""
+    annotated: list[dict[str, Any]] = []
+    new_line = 0
+    for line in diff_lines:
+        entry: dict[str, Any] = {"text": line, "line": None}
+        if line.startswith("+++") or line.startswith("---") or line.startswith("@@"):
+            annotated.append(entry)
+            continue
+        if line.startswith("-"):
+            annotated.append(entry)
+            continue
+        new_line += 1
+        entry["line"] = new_line
+        annotated.append(entry)
+    return annotated
+
+
 @app.route("/repo/<repo_name>/commit/<commit_hash>")
 def commit_detail(repo_name: str, commit_hash: str) -> str | Any:
     """Render commit detail page with metadata and file diffs."""
@@ -258,33 +276,79 @@ def commit_detail(repo_name: str, commit_hash: str) -> str | Any:
         return redirect(url_for("repo_detail", repo_name=repo_name))
 
     diffs: list[dict[str, Any]] = []
+    base_hash = commit_data["parent_hash"] or ""
     if commit_data["parent_hash"]:
         diffs = ops.get_diffs(commit_data["parent_hash"], commit_hash)
         for d in diffs:
-            d["diff_lines"] = list(difflib.unified_diff(
+            d["diff_lines"] = _annotate_diff_lines(list(difflib.unified_diff(
                 d["old_content"].splitlines(keepends=True),
                 d["new_content"].splitlines(keepends=True),
                 fromfile=f"a/{d['path']}",
                 tofile=f"b/{d['path']}",
                 lineterm="",
-            ))
+            )))
     else:
         tree_files = ops._flatten_tree(commit_data["tree_hash"])
         for path, blob_hash in sorted(tree_files.items()):
             content = ops.get_blob_content(blob_hash) or ""
             diff_lines = [f"+{line}" for line in content.splitlines()]
+            d_lines = ["--- /dev/null", f"+++ b/{path}"] + diff_lines
             diffs.append({
                 "path": path,
                 "status": "added",
-                "diff_lines": ["--- /dev/null", f"+++ b/{path}"] + diff_lines,
+                "diff_lines": _annotate_diff_lines(d_lines),
             })
+
+    comments = ops.list_review_comments(base_hash, commit_hash, "all")
+    comment_map: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for comment in comments:
+        key = (comment["file_path"], comment["line_number"])
+        comment_map.setdefault(key, []).append(comment)
 
     return render_template(
         "commit_detail.html",
         repo_name=repo_name,
         commit=commit_data,
         diffs=diffs,
+        comments=comments,
+        comment_map=comment_map,
+        base_hash=base_hash,
     )
+
+
+@app.route("/repo/<repo_name>/commit/<commit_hash>/comments", methods=["POST"])
+def add_commit_comment(repo_name: str, commit_hash: str) -> Any:
+    """Add a review comment on a commit diff line."""
+    ops = get_ops(repo_name)
+    file_path = request.form.get("path", "").strip()
+    line_raw = request.form.get("line", "").strip()
+    body = request.form.get("body", "").strip()
+    base_hash = request.form.get("base_hash", "").strip()
+    if not file_path or not line_raw or not body:
+        flash("Path, line, and comment body are required", "error")
+        return redirect(url_for("commit_detail", repo_name=repo_name, commit_hash=commit_hash))
+    try:
+        line_number = int(line_raw)
+        ops.add_review_comment(base_hash, commit_hash, file_path, line_number, body)
+        flash("Review comment added", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("commit_detail", repo_name=repo_name, commit_hash=commit_hash))
+
+
+@app.route("/repo/<repo_name>/comments/<int:comment_id>/address", methods=["POST"])
+def address_comment(repo_name: str, comment_id: int) -> Any:
+    """Mark a review comment as addressed."""
+    ops = get_ops(repo_name)
+    commit_hash = request.form.get("commit_hash", "").strip()
+    try:
+        ops.address_review_comment(comment_id)
+        flash(f"Comment {comment_id} addressed", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    if commit_hash:
+        return redirect(url_for("commit_detail", repo_name=repo_name, commit_hash=commit_hash))
+    return redirect(url_for("repo_detail", repo_name=repo_name))
 
 
 @app.route("/repo/<repo_name>/new-branch", methods=["POST"])

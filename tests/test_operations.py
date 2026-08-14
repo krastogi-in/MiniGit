@@ -253,3 +253,57 @@ class TestOperations:
         ops.create_new_commit("commit", author="Tester")
         staged = ops.db.get_staged()
         assert len(staged) == 0
+
+    def test_get_branch_diff_same_tips(self) -> None:
+        """Identical branch tips produce an empty diff."""
+        ops = self._init_ops()
+        diffs = ops.get_branch_diff("main", "main")
+        assert diffs == []
+
+    def test_get_branch_diff_unknown_branch(self) -> None:
+        """Unknown branch raises ValueError."""
+        ops = self._init_ops()
+        try:
+            ops.get_branch_diff("missing")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+    def test_get_branch_diff_unknown_base(self) -> None:
+        """Unknown base branch raises ValueError."""
+        ops = self._init_ops()
+        try:
+            ops.get_branch_diff("main", "missing")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+    def test_get_branch_diff_feature_adds_file(self) -> None:
+        """Feature branch with a new file diffs against main."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        ops.checkout_branch("feature")
+        new_file = os.path.join(self.tmpdir, "feature.txt")
+        with open(new_file, "w") as f:
+            f.write("feature content\n")
+        ops.add("feature.txt")
+        ops.create_new_commit("feature commit", author="Tester")
+        diffs = ops.get_branch_diff("feature", "main")
+        assert len(diffs) == 1
+        assert diffs[0]["path"] == "feature.txt"
+        assert diffs[0]["status"] == "added"
+
+    def test_get_branch_diff_modified_file(self) -> None:
+        """Modified file on feature branch shows as modified vs main."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        ops.checkout_branch("feature")
+        readme = os.path.join(self.tmpdir, "README.md")
+        with open(readme, "w") as f:
+            f.write("# Updated\n")
+        ops.add("README.md")
+        ops.create_new_commit("update readme", author="Tester")
+        diffs = ops.get_branch_diff("feature", "main")
+        assert len(diffs) == 1
+        assert diffs[0]["path"] == "README.md"
+        assert diffs[0]["status"] == "modified"

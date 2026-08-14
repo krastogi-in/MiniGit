@@ -305,6 +305,24 @@ class Operations:
             })
         return diffs
 
+    def get_branch_diff(
+        self, branch_name: str, base_branch: str = "main",
+    ) -> list[dict[str, str]]:
+        """Diff branch tip against base branch tip (tip-to-tip; no merge-base).
+
+        Returns the same structure as get_diffs(). Raises ValueError if either
+        ref does not exist.
+        """
+        base_hash = self.db.get_ref(base_branch)
+        if not base_hash:
+            raise ValueError(f"Branch '{base_branch}' does not exist")
+        branch_hash = self.db.get_ref(branch_name)
+        if not branch_hash:
+            raise ValueError(f"Branch '{branch_name}' does not exist")
+        if base_hash == branch_hash:
+            return []
+        return self.get_diffs(base_hash, branch_hash)
+
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""
         entries_json = self.db.get_tree(tree_hash)

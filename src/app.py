@@ -67,6 +67,21 @@ def get_ops(repo_name: str) -> Operations:
     return Operations(repo_path, db_path)
 
 
+def _diffs_with_lines(diffs: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Attach unified-diff line lists for template rendering."""
+    result: list[dict[str, Any]] = []
+    for d in diffs:
+        diff_lines = list(difflib.unified_diff(
+            d["old_content"].splitlines(keepends=True),
+            d["new_content"].splitlines(keepends=True),
+            fromfile=f"a/{d['path']}",
+            tofile=f"b/{d['path']}",
+            lineterm="",
+        ))
+        result.append({**d, "diff_lines": diff_lines})
+    return result
+
+
 @app.route("/")
 def index() -> str:
     """Render the homepage listing all registered repositories."""
@@ -259,15 +274,9 @@ def commit_detail(repo_name: str, commit_hash: str) -> str | Any:
 
     diffs: list[dict[str, Any]] = []
     if commit_data["parent_hash"]:
-        diffs = ops.get_diffs(commit_data["parent_hash"], commit_hash)
-        for d in diffs:
-            d["diff_lines"] = list(difflib.unified_diff(
-                d["old_content"].splitlines(keepends=True),
-                d["new_content"].splitlines(keepends=True),
-                fromfile=f"a/{d['path']}",
-                tofile=f"b/{d['path']}",
-                lineterm="",
-            ))
+        diffs = _diffs_with_lines(
+            ops.get_diffs(commit_data["parent_hash"], commit_hash),
+        )
     else:
         tree_files = ops._flatten_tree(commit_data["tree_hash"])
         for path, blob_hash in sorted(tree_files.items()):
@@ -284,6 +293,43 @@ def commit_detail(repo_name: str, commit_hash: str) -> str | Any:
         repo_name=repo_name,
         commit=commit_data,
         diffs=diffs,
+    )
+
+
+@app.route("/repo/<repo_name>/compare")
+def compare_branches(repo_name: str) -> str | Any:
+    """Render branch-vs-base compare view (tip-to-tip diff)."""
+    ops = get_ops(repo_name)
+    branch = request.args.get("branch", "").strip()
+    base = request.args.get("base", "main").strip() or "main"
+    branches = ops.get_all_branches()
+    diffs: list[dict[str, Any]] = []
+    error: str | None = None
+    base_hash: str | None = None
+    branch_hash: str | None = None
+
+    if branch:
+        try:
+            base_hash = ops.db.get_ref(base)
+            branch_hash = ops.db.get_ref(branch)
+            if not base_hash:
+                raise ValueError(f"Branch '{base}' does not exist")
+            if not branch_hash:
+                raise ValueError(f"Branch '{branch}' does not exist")
+            diffs = _diffs_with_lines(ops.get_branch_diff(branch, base))
+        except ValueError as e:
+            error = str(e)
+
+    return render_template(
+        "compare.html",
+        repo_name=repo_name,
+        branch=branch,
+        base=base,
+        branches=branches,
+        diffs=diffs,
+        error=error,
+        base_hash=base_hash,
+        branch_hash=branch_hash,
     )
 
 

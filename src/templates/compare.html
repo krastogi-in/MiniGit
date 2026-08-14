@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Compare - {{ repo_name }} - MiniGit{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Repositories</a> /
+    <a href="/repo/{{ repo_name }}">{{ repo_name }}</a> /
+    <strong>Compare</strong>
+</div>
+
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">Compare branches</div>
+    <div class="card-body padded">
+        <form method="GET" action="/repo/{{ repo_name }}/compare" class="inline-form" style="flex-wrap: wrap;">
+            <label>
+                Base
+                <select name="base">
+                    {% for b in branches %}
+                    <option value="{{ b.name }}" {% if b.name == base %}selected{% endif %}>
+                        {{ b.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Branch
+                <select name="branch" required>
+                    <option value="" disabled {% if not branch %}selected{% endif %}>Select branch</option>
+                    {% for b in branches %}
+                    <option value="{{ b.name }}" {% if b.name == branch %}selected{% endif %}>
+                        {{ b.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button type="submit" class="btn btn-primary">Compare</button>
+        </form>
+        <p class="meta" style="margin-top: 12px;">
+            Tip-to-tip diff: compares each branch's latest commit directly (no merge-base).
+            If the base branch moves after a fork, unrelated base changes may appear.
+        </p>
+    </div>
+</div>
+
+{% if error %}
+<div class="flash error">{{ error }}</div>
+{% endif %}
+
+{% if branch and not error %}
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">
+        <span>{{ base }} → {{ branch }}</span>
+        {% if base_hash and branch_hash %}
+        <span class="hash">{{ base_hash[:8] }} … {{ branch_hash[:8] }}</span>
+        {% endif %}
+    </div>
+</div>
+
+{% if diffs %}
+<div class="card">
+    <div class="card-header">
+        {{ diffs|length }} file{{ 's' if diffs|length != 1 }} changed
+    </div>
+    <div class="card-body padded">
+        {% for d in diffs %}
+        <div class="diff-block">
+            <div class="diff-header">
+                <span class="badge {{ d.status }}">{{ d.status }}</span>
+                &nbsp; {{ d.path }}
+            </div>
+            {% for line in d.diff_lines %}
+            {% if line.startswith('+') and not line.startswith('+++') %}
+            <div class="diff-line add">{{ line }}</div>
+            {% elif line.startswith('-') and not line.startswith('---') %}
+            <div class="diff-line del">{{ line }}</div>
+            {% elif line.startswith('@@') %}
+            <div class="diff-line hunk">{{ line }}</div>
+            {% else %}
+            <div class="diff-line">{{ line }}</div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body padded meta">No differences.</div>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

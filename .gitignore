@@ -44,6 +44,6 @@ Thumbs.db
 .env
 .env.local
 
-# Agent run scratch (per ticket); see agent_space/README.md
-# Optionally ignore local runs: agent_space/*/
-# Keep agent_space/README.md tracked.
+# Agent SDLC scratch (ideas/specs/tasks/reviews) — local only, never commit
+agent_space/
+

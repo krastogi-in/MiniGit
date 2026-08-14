@@ -70,11 +70,6 @@ def main() -> None:
         "Jira",
         "AGENTS.md",
     )
-    require_file(
-        ROOT / "agent_space" / "README.md",
-        "ISSUE-KEY",
-        "Not product docs",
-    )
     require_file(ROOT / "docs" / "examples" / "merge" / "README.md", "Example only")
     require_file(SKILLS / "_templates" / "phase-comment.md", "SDLC phase")
     require_file(

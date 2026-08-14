@@ -44,7 +44,6 @@ Thumbs.db
 .env
 .env.local
 
-# Agent run scratch (per-ticket ideas/specs/tasks/reviews) — never commit
-agent_space/*/
-# Keep agent_space/README.md tracked (registry pointer for make eval-skills).
+# Agent SDLC scratch (ideas/specs/tasks/reviews) — local only, never commit
+agent_space/
 

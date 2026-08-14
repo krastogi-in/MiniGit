@@ -7,10 +7,13 @@ Usage:
     minigit branch                      List branches
     minigit branch <name>               Create a new branch
     minigit checkout <branch>           Switch to a branch
-    minigit show <hash>                 Show commit details
-    minigit diff <hash1> <hash2>        Diff two commits
+    minigit show <ref>                   Show commit details (hash, branch, or tag)
+    minigit diff <ref1> <ref2>          Diff two commits (hash, branch, or tag)
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit tag <name> [<ref>]          Create a tag (defaults to current branch tip)
+    minigit tag                         List tags
+    minigit tag -d <name>               Delete a tag
     minigit serve                       Start the web UI
 """
 
@@ -107,7 +110,12 @@ def cmd_checkout(args: argparse.Namespace) -> None:
 def cmd_show(args: argparse.Namespace) -> None:
     """Handle the 'show' subcommand — display commit details."""
     ops = get_ops(args)
-    commit = ops.get_commit(args.hash)
+    try:
+        resolved_hash = ops.resolve_ref(args.hash)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return
+    commit = ops.get_commit(resolved_hash)
     if not commit:
         print(f"Error: commit {args.hash} not found")
         return
@@ -123,7 +131,13 @@ def cmd_show(args: argparse.Namespace) -> None:
 def cmd_diff(args: argparse.Namespace) -> None:
     """Handle the 'diff' subcommand — show differences between two commits."""
     ops = get_ops(args)
-    diffs = ops.get_diffs(args.hash1, args.hash2)
+    try:
+        hash1 = ops.resolve_ref(args.hash1)
+        hash2 = ops.resolve_ref(args.hash2)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return
+    diffs = ops.get_diffs(hash1, hash2)
     if not diffs:
         print("No differences.")
         return
@@ -143,6 +157,39 @@ def cmd_diff(args: argparse.Namespace) -> None:
                 print(f"\033[31m{line}\033[0m")
             else:
                 print(line)
+
+
+def cmd_tag(args: argparse.Namespace) -> None:
+    """Handle the 'tag' subcommand — create, list, or delete tags."""
+    ops = get_ops(args)
+    if args.delete:
+        try:
+            ops.delete_tag(args.delete)
+            print(f"Deleted tag '{args.delete}'")
+        except ValueError as e:
+            print(f"Error: {e}")
+        return
+
+    if args.name:
+        try:
+            commit_hash = ops.resolve_ref(args.ref) if args.ref else None
+            ops.create_tag(
+                args.name,
+                commit_hash=commit_hash,
+                tagger=args.author,
+                message=args.message,
+            )
+            print(f"Tag '{args.name}' created")
+        except ValueError as e:
+            print(f"Error: {e}")
+        return
+
+    tags = ops.get_all_tags()
+    if not tags:
+        print("No tags yet.")
+        return
+    for t in tags:
+        print(f"{t['name']}  ({t['commit_hash'][:8]})")
 
 
 def cmd_ls(args: argparse.Namespace) -> None:
@@ -210,6 +257,13 @@ def main() -> None:
     p_diff.add_argument("hash1")
     p_diff.add_argument("hash2")
 
+    p_tag = sub.add_parser("tag", help="List, create, or delete tags")
+    p_tag.add_argument("name", nargs="?", default=None)
+    p_tag.add_argument("ref", nargs="?", default=None, help="Commit, branch, or tag to point at")
+    p_tag.add_argument("-d", "--delete", metavar="NAME", default=None)
+    p_tag.add_argument("--author", default=None, help="Tagger name (defaults to $USER)")
+    p_tag.add_argument("-m", "--message", default=None, help="Tag message")
+
     p_ls = sub.add_parser("ls", help="List files in a tree")
     p_ls.add_argument("tree_hash", nargs="?", default=None)
 
@@ -227,6 +281,7 @@ def main() -> None:
         "checkout": cmd_checkout,
         "show": cmd_show,
         "diff": cmd_diff,
+        "tag": cmd_tag,
         "ls": cmd_ls,
         "cat": cmd_cat,
         "serve": cmd_serve,

@@ -39,7 +39,7 @@ def _validate_str(value: str, label: str, max_len: int = 10000) -> None:
 class SQLiteClient:
     """Manages a SQLite database storing MiniGit objects.
 
-    Tables: blobs, trees, commits, refs, staging.
+    Tables: blobs, trees, commits, refs, staging, tags.
     All write operations validate inputs before executing queries.
     """
 
@@ -77,6 +77,13 @@ class SQLiteClient:
                 path TEXT PRIMARY KEY,
                 action TEXT NOT NULL,
                 blob_hash TEXT
+            );
+            CREATE TABLE IF NOT EXISTS tags (
+                name TEXT PRIMARY KEY,
+                commit_hash TEXT NOT NULL,
+                tagger TEXT NOT NULL,
+                message TEXT NOT NULL,
+                timestamp TEXT NOT NULL
             );
         """)
         self.conn.commit()
@@ -186,6 +193,55 @@ class SQLiteClient:
         self.cursor.execute("DELETE FROM refs WHERE name = ?", (name,))
         self.conn.commit()
         logger.info("deleted_ref", name=name)
+
+    def store_tag(
+        self,
+        name: str,
+        commit_hash: str,
+        tagger: str,
+        message: str,
+        timestamp: str,
+    ) -> None:
+        """Persist a new annotated tag. Raises ValueError if the name is taken.
+
+        Unlike refs, tags are immutable — an existing tag name is never
+        overwritten.
+        """
+        _validate_ref_name(name)
+        _validate_hash(commit_hash, "commit hash")
+        _validate_str(tagger, "tagger", max_len=200)
+        _validate_str(message, "tag message", max_len=5000)
+        _validate_str(timestamp, "timestamp", max_len=50)
+        if self.get_tag(name) is not None:
+            raise ValueError(f"Tag '{name}' already exists")
+        self.cursor.execute(
+            "INSERT INTO tags (name, commit_hash, tagger, message, timestamp) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (name, commit_hash, tagger, message, timestamp),
+        )
+        self.conn.commit()
+        logger.info("stored_tag", name=name, target=commit_hash[:8])
+
+    def get_tag(self, name: str) -> dict[str, Any] | None:
+        """Retrieve a tag by name, or None if not found."""
+        _validate_ref_name(name)
+        self.cursor.execute("SELECT * FROM tags WHERE name = ?", (name,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def get_all_tags(self) -> list[dict[str, Any]]:
+        """Return all tags as a list of dicts."""
+        self.cursor.execute("SELECT * FROM tags ORDER BY name")
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def delete_tag(self, name: str) -> None:
+        """Delete a tag by name. Raises ValueError if it doesn't exist."""
+        _validate_ref_name(name)
+        if self.get_tag(name) is None:
+            raise ValueError(f"Tag '{name}' does not exist")
+        self.cursor.execute("DELETE FROM tags WHERE name = ?", (name,))
+        self.conn.commit()
+        logger.info("deleted_tag", name=name)
 
     def stage_file(self, path: str, action: str, blob_hash: str | None = None) -> None:
         """Stage a file for the next commit. Action must be 'add' or 'delete'."""

@@ -109,6 +109,72 @@ class TestSQLiteClient:
         assert len(commits) == 2
 
 
+class TestTagStorage:
+    """Verify CRUD operations on the tags table."""
+
+    def setup_method(self) -> None:
+        """Create a temporary database file."""
+        self.fd, self.db_path = tempfile.mkstemp(suffix=".db")
+        self.db = SQLiteClient(self.db_path)
+
+    def teardown_method(self) -> None:
+        """Close and remove the temporary database."""
+        self.db.close()
+        os.close(self.fd)
+        os.unlink(self.db_path)
+
+    def test_store_and_get_tag(self) -> None:
+        """Stored tag is retrievable with all metadata intact."""
+        h = "a" * 64
+        self.db.store_tag("v1.0", h, "Alice", "release", "2026-01-01")
+        tag = self.db.get_tag("v1.0")
+        assert tag["name"] == "v1.0"
+        assert tag["commit_hash"] == h
+        assert tag["tagger"] == "Alice"
+        assert tag["message"] == "release"
+        assert tag["timestamp"] == "2026-01-01"
+
+    def test_get_missing_tag(self) -> None:
+        """Missing tag returns None."""
+        assert self.db.get_tag("nope") is None
+
+    def test_duplicate_tag_name_rejected(self) -> None:
+        """Re-creating an existing tag name raises and does not overwrite it."""
+        h = "b" * 64
+        self.db.store_tag("v1.0", h, "Alice", "release", "2026-01-01")
+        try:
+            self.db.store_tag("v1.0", h, "Bob", "again", "2026-01-02")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+        assert self.db.get_tag("v1.0")["tagger"] == "Alice"
+
+    def test_get_all_tags(self) -> None:
+        """get_all_tags returns all stored tags."""
+        h1 = "c" * 64
+        h2 = "d" * 64
+        self.db.store_tag("v1.0", h1, "Alice", "first", "2026-01-01")
+        self.db.store_tag("v2.0", h2, "Bob", "second", "2026-01-02")
+        tags = self.db.get_all_tags()
+        names = {t["name"] for t in tags}
+        assert names == {"v1.0", "v2.0"}
+
+    def test_delete_tag(self) -> None:
+        """Deleted tag is no longer retrievable."""
+        h = "e" * 64
+        self.db.store_tag("temp", h, "Alice", "msg", "2026-01-01")
+        self.db.delete_tag("temp")
+        assert self.db.get_tag("temp") is None
+
+    def test_delete_missing_tag_raises(self) -> None:
+        """Deleting a nonexistent tag raises ValueError."""
+        try:
+            self.db.delete_tag("nope")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+
 class TestValidation:
     """Verify input validation rejects malformed data."""
 
@@ -183,3 +249,19 @@ class TestValidation:
         """Valid ref name with slashes and dashes is accepted."""
         self.db.set_ref("feature/my-branch", "a" * 64)
         assert self.db.get_ref("feature/my-branch") == "a" * 64
+
+    def test_invalid_tag_name_rejected(self) -> None:
+        """Tag name with spaces is rejected."""
+        try:
+            self.db.store_tag("bad name", "a" * 64, "Alice", "msg", "ts")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+    def test_invalid_tag_commit_hash_rejected(self) -> None:
+        """Non-hex commit hash on a tag is rejected."""
+        try:
+            self.db.store_tag("v1.0", "not-a-hash", "Alice", "msg", "ts")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass

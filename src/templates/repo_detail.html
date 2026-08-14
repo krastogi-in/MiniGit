@@ -25,6 +25,36 @@
     </form>
 </div>
 
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">
+        <span>Tags</span>
+        <form action="/repo/{{ repo_name }}/new-tag" method="POST" class="inline-form">
+            <input type="text" name="name" placeholder="Tag name" required>
+            <input type="text" name="ref" placeholder="Commit/branch (default: {{ branch }} tip)">
+            <input type="text" name="message" placeholder="Message">
+            <button type="submit" class="btn">+ Tag</button>
+        </form>
+    </div>
+    <div class="card-body">
+        {% if tags %}
+        {% for t in tags %}
+        <div class="list-item">
+            <span class="icon">&#127991;</span>
+            <a href="/repo/{{ repo_name }}/commit/{{ t.commit_hash }}">{{ t.name }}</a>
+            <span class="hash" style="margin-left: auto;">{{ t.commit_hash[:8] }}</span>
+            <form action="/repo/{{ repo_name }}/tag/{{ t.name }}/delete" method="POST" style="margin-left: 8px;">
+                <button type="submit" class="btn" style="background: #4a1c1c; border-color: #7a2c2c; color: #f8a0a0;">
+                    Delete
+                </button>
+            </form>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="list-item meta">No tags yet</div>
+        {% endif %}
+    </div>
+</div>
+
 {% if latest_commit %}
 <div class="card" style="margin-bottom: 16px;">
     <div class="card-header">

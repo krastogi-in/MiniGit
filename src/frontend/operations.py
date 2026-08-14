@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
+from datetime import datetime
 from hashlib import sha256
 from typing import Any
 
@@ -18,6 +20,8 @@ from components.tree import Tree
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 logger = structlog.get_logger(__name__)
+
+_HEX_HASH = re.compile(r"^[0-9a-f]{64}$")
 
 
 class Operations:
@@ -117,6 +121,65 @@ class Operations:
         if not existing:
             raise ValueError(f"Branch '{branch_name}' does not exist")
         self.db.delete_ref(branch_name)
+
+    def create_tag(
+        self,
+        name: str,
+        commit_hash: str | None = None,
+        tagger: str | None = None,
+        message: str | None = None,
+    ) -> str:
+        """Create an immutable annotated tag pointing at a commit.
+
+        Defaults to the current branch's tip when *commit_hash* is omitted.
+        Raises ValueError if the name collides with an existing branch or
+        tag, or if the target commit does not exist.
+        """
+        if self.db.get_ref(name) is not None:
+            raise ValueError(f"'{name}' already exists as a branch name")
+        if self.db.get_tag(name) is not None:
+            raise ValueError(f"Tag '{name}' already exists")
+
+        if commit_hash is None:
+            commit_hash = self.db.get_ref(self.branch)
+            if not commit_hash:
+                raise ValueError(f"Current branch '{self.branch}' has no commits")
+        elif not self.db.get_commit(commit_hash):
+            raise ValueError(f"Commit '{commit_hash}' does not exist")
+
+        if tagger is None:
+            tagger = os.getenv("USER", "unknown")
+        if message is None:
+            message = ""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        self.db.store_tag(name, commit_hash, tagger, message, timestamp)
+        logger.info("tag_created", name=name, target=commit_hash[:8])
+        return name
+
+    def delete_tag(self, name: str) -> None:
+        """Delete a tag by name. Raises ValueError if it doesn't exist."""
+        self.db.delete_tag(name)
+
+    def get_all_tags(self) -> list[dict[str, Any]]:
+        """Return all tags as a list of dicts."""
+        return self.db.get_all_tags()
+
+    def resolve_ref(self, ref: str) -> str:
+        """Resolve a commit hash, branch name, or tag name to a commit hash.
+
+        Lookup precedence: exact commit hash match, then branch, then tag.
+        Raises ValueError if *ref* matches none of the above.
+        """
+        if _HEX_HASH.match(ref) and self.db.get_commit(ref):
+            return ref
+        branch_target = self.db.get_ref(ref)
+        if branch_target:
+            return branch_target
+        tag = self.db.get_tag(ref)
+        if tag:
+            return tag["commit_hash"]
+        raise ValueError(f"Could not resolve '{ref}' to a commit, branch, or tag")
 
     def add(self, file_path: str) -> str:
         """Stage a file for the next commit. Returns the blob hash."""

@@ -179,6 +179,7 @@ def _print_reset_preview(preview: dict[str, Any]) -> None:
     print(f"Reset preview ({preview['mode']}) on branch '{preview['branch']}'")
     print(f"  current tip: {preview['current_tip'][:8]}")
     print(f"  target:      {preview['target'][:8]}")
+    print("  note: target must be an ancestor of the current tip")
     dropped = preview["commits_to_drop"]
     if dropped:
         print(f"  commits that leave the tip path ({len(dropped)}):")
@@ -194,14 +195,36 @@ def _print_reset_preview(preview: dict[str, Any]) -> None:
             f"delete={len(impact['deleted'])} "
             f"create={len(impact['created'])}"
         )
-    if preview["dirty_tracked"]:
-        print(f"  dirty tracked files: {len(preview['dirty_tracked'])}")
+        _print_path_sample("    overwrite", impact["overwritten"])
+        _print_path_sample("    delete", impact["deleted"])
+        _print_path_sample("    create", impact["created"])
+    dirty = preview["dirty_tracked"]
+    if dirty:
+        print(f"  dirty tracked files: {len(dirty)}")
+        _print_path_sample("    dirty", dirty)
     if preview["staging_count"]:
         print(f"  staged entries: {preview['staging_count']}")
+        if preview["mode"] == "soft":
+            print("  note: soft keeps MiniGit staging rows (not a full Git index)")
+
+
+def _print_path_sample(label: str, paths: list[str], limit: int = 10) -> None:
+    """Print up to *limit* paths under a label."""
+    if not paths:
+        return
+    shown = paths[:limit]
+    for path in shown:
+        print(f"{label}: {path}")
+    remaining = len(paths) - len(shown)
+    if remaining > 0:
+        print(f"{label}: … and {remaining} more")
 
 
 def cmd_reset(args: argparse.Namespace) -> None:
     """Handle safe reset with dry-run preview."""
+    if args.dry_run and args.yes:
+        print("Error: use either --dry-run or --yes, not both")
+        sys.exit(1)
     ops = get_ops(args)
     mode = "mixed"
     if args.soft:
@@ -269,10 +292,16 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
-    p_reset = sub.add_parser("reset", help="Safe reset with loss preview")
-    p_reset.add_argument("hash", help="Target commit hash (64-char hex)")
+    p_reset = sub.add_parser(
+        "reset",
+        help="Safe reset with loss preview (target must be an ancestor)",
+    )
+    p_reset.add_argument(
+        "hash",
+        help="Target ancestor commit hash (64-char hex)",
+    )
     mode = p_reset.add_mutually_exclusive_group()
-    mode.add_argument("--soft", action="store_true", help="Move tip only")
+    mode.add_argument("--soft", action="store_true", help="Move tip; keep staging rows")
     mode.add_argument(
         "--mixed",
         action="store_true",
@@ -286,12 +315,12 @@ def main() -> None:
     p_reset.add_argument(
         "--dry-run",
         action="store_true",
-        help="Show preview only; do not change tip",
+        help="Show preview only; do not change tip (not with --yes)",
     )
     p_reset.add_argument(
         "--yes",
         action="store_true",
-        help="Apply reset after printing preview",
+        help="Apply reset after printing preview (not with --dry-run)",
     )
     p_reset.add_argument(
         "--force",

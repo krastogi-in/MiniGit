@@ -69,7 +69,7 @@ class TestSafeReset:
         ops = self._init()
         tip0 = ops.get_commit_history()[0]["hash"]
         self._second_commit(ops, "# v2\n")
-        ops.reset(tip0, mode="hard", confirm=True, force=True)
+        ops.reset(tip0, mode="hard", confirm=True)
         assert ops.db.get_ref("main") == tip0
         with open(os.path.join(self.tmpdir, "README.md")) as f:
             assert f.read() == "# v1\n"
@@ -83,6 +83,34 @@ class TestSafeReset:
         with pytest.raises(ValueError, match="uncommitted"):
             ops.reset(tip0, mode="hard", confirm=True, force=False)
         assert ops.db.get_ref("main") != tip0
+
+    def test_invalid_hash_format(self) -> None:
+        ops = self._init()
+        tip = ops.db.get_ref("main")
+        with pytest.raises(ValueError, match="Invalid commit hash"):
+            ops.reset("not-a-hash", confirm=True)
+        assert ops.db.get_ref("main") == tip
+
+    def test_tip_equals_target_noop(self) -> None:
+        ops = self._init()
+        tip = ops.db.get_ref("main")
+        assert tip is not None
+        preview = ops.reset(tip, mode="mixed", confirm=True)
+        assert preview["commits_to_drop"] == []
+        assert ops.db.get_ref("main") == tip
+
+    def test_hard_removes_empty_dirs(self) -> None:
+        ops = self._init()
+        tip0 = ops.get_commit_history()[0]["hash"]
+        nested = os.path.join(self.tmpdir, "pkg", "mod.py")
+        os.makedirs(os.path.dirname(nested))
+        with open(nested, "w") as f:
+            f.write("x = 1\n")
+        ops.add("pkg/mod.py")
+        ops.create_new_commit("add nested", author="Tester")
+        ops.reset(tip0, mode="hard", confirm=True)
+        assert not os.path.exists(nested)
+        assert not os.path.isdir(os.path.join(self.tmpdir, "pkg"))
 
     def test_unknown_hash(self) -> None:
         ops = self._init()

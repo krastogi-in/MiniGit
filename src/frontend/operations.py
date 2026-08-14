@@ -449,12 +449,26 @@ class Operations:
             full = os.path.join(self.repo_path, path)
             if os.path.isfile(full):
                 os.remove(full)
+            self._remove_empty_parents(full)
         for path, blob_hash in new_files.items():
             content = self.db.get_blob(blob_hash) or ""
             full = os.path.join(self.repo_path, path)
-            os.makedirs(os.path.dirname(full) or ".", exist_ok=True)
+            parent = os.path.dirname(full)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
             with open(full, "w", encoding="utf-8") as f:
                 f.write(content)
+
+    def _remove_empty_parents(self, file_path: str) -> None:
+        """Remove empty directories from file_path up to (not including) repo root."""
+        parent = os.path.dirname(file_path)
+        repo = os.path.abspath(self.repo_path)
+        while parent and os.path.abspath(parent).startswith(repo + os.sep):
+            try:
+                os.rmdir(parent)
+            except OSError:
+                break
+            parent = os.path.dirname(parent)
 
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""

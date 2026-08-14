@@ -78,6 +78,12 @@ class SQLiteClient:
                 action TEXT NOT NULL,
                 blob_hash TEXT
             );
+            CREATE TABLE IF NOT EXISTS stashes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                message TEXT NOT NULL,
+                payload_json TEXT NOT NULL
+            );
         """)
         self.conn.commit()
 
@@ -208,6 +214,43 @@ class SQLiteClient:
     def clear_staging(self) -> None:
         """Remove all entries from the staging area."""
         self.cursor.execute("DELETE FROM staging")
+        self.conn.commit()
+
+    def push_stash(self, created_at: str, message: str, payload_json: str) -> int:
+        """Insert a stash entry; returns the new row id."""
+        _validate_str(created_at, "created_at", max_len=50)
+        _validate_str(message, "stash message", max_len=5000)
+        _validate_str(payload_json, "stash payload", max_len=10_000_000)
+        self.cursor.execute(
+            "INSERT INTO stashes (created_at, message, payload_json) VALUES (?, ?, ?)",
+            (created_at, message, payload_json),
+        )
+        self.conn.commit()
+        stash_id = int(self.cursor.lastrowid or 0)
+        logger.info("stash_pushed", id=stash_id)
+        return stash_id
+
+    def list_stashes(self) -> list[dict[str, Any]]:
+        """Return stash entries newest-first (highest id first)."""
+        self.cursor.execute(
+            "SELECT id, created_at, message, payload_json FROM stashes ORDER BY id DESC"
+        )
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    def get_top_stash(self) -> dict[str, Any] | None:
+        """Return the newest stash entry, or None if the stack is empty."""
+        self.cursor.execute(
+            "SELECT id, created_at, message, payload_json FROM stashes "
+            "ORDER BY id DESC LIMIT 1"
+        )
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+
+    def delete_stash(self, stash_id: int) -> None:
+        """Delete a stash entry by id."""
+        if not isinstance(stash_id, int) or stash_id < 1:
+            raise ValueError(f"Invalid stash id: {stash_id!r}")
+        self.cursor.execute("DELETE FROM stashes WHERE id = ?", (stash_id,))
         self.conn.commit()
 
     def close(self) -> None:

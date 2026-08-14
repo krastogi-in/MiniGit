@@ -11,6 +11,7 @@ Usage:
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit stash [push|list|pop]       Stash staged changes
     minigit serve                       Start the web UI
 """
 
@@ -181,6 +182,33 @@ def cmd_serve(args: argparse.Namespace) -> None:
     app.run(debug=True, port=args.port)
 
 
+def cmd_stash(args: argparse.Namespace) -> None:
+    """Handle stash push / list / pop."""
+    ops = get_ops(args)
+    action = args.stash_action or "push"
+    try:
+        if action == "push":
+            meta = ops.stash_push(message=args.message)
+            print(f"Saved working directory and staging to stash@{{{meta['id']}}}")
+            print(f"  {meta['message']}")
+        elif action == "list":
+            entries = ops.stash_list()
+            if not entries:
+                print("No stash entries.")
+                return
+            for e in entries:
+                print(f"stash@{{{e['index']}}}: {e['message']} ({e['created_at']})")
+        elif action == "pop":
+            meta = ops.stash_pop()
+            print(f"Dropped stash@{{{meta['id']}}} ({meta['message']})")
+        else:
+            print(f"Error: unknown stash action '{action}'")
+            sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
 def main() -> None:
     """Parse arguments and dispatch to the appropriate command handler."""
     parser = argparse.ArgumentParser(
@@ -219,6 +247,16 @@ def main() -> None:
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
+    p_stash = sub.add_parser("stash", help="Stash staged changes")
+    p_stash.add_argument(
+        "stash_action",
+        nargs="?",
+        default="push",
+        choices=["push", "list", "pop"],
+        help="push (default), list, or pop",
+    )
+    p_stash.add_argument("-m", "--message", default=None, help="Stash message")
+
     args = parser.parse_args()
     commands: dict[str, Any] = {
         "init": cmd_init,
@@ -230,6 +268,7 @@ def main() -> None:
         "ls": cmd_ls,
         "cat": cmd_cat,
         "serve": cmd_serve,
+        "stash": cmd_stash,
     }
     commands[args.command](args)
 

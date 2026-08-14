@@ -131,7 +131,51 @@
                 </form>
             </div>
         </div>
+
+        <div class="card" style="margin-top: 16px;">
+            <div class="card-header">Stash staged changes</div>
+            <div class="card-body padded">
+                <form action="/repo/{{ repo_name }}/stash" method="POST">
+                    <div style="margin-bottom: 12px;">
+                        <input type="text" name="message" placeholder="Optional stash message"
+                               style="width: 100%; padding: 8px 12px;">
+                    </div>
+                    <button type="submit" class="btn" style="width: 100%;">
+                        Stash {{ staged|length }} file{{ 's' if staged|length != 1 }}
+                    </button>
+                </form>
+            </div>
+        </div>
         {% endif %}
+
+        <div class="card" style="margin-top: 16px;">
+            <div class="card-header">
+                <span>Stash stack</span>
+                <span class="badge">{{ stashes|length }}</span>
+            </div>
+            <div class="card-body">
+                {% if stashes %}
+                {% for s in stashes %}
+                <div class="list-item">
+                    <span class="badge" style="font-size: 11px;">{{ s.index }}</span>
+                    <span style="flex: 1; font-family: monospace; font-size: 13px;">
+                        {{ s.message }}
+                    </span>
+                    <span class="meta">{{ s.created_at }}</span>
+                </div>
+                {% endfor %}
+                <div class="card-body padded" style="padding-top: 8px;">
+                    <form action="/repo/{{ repo_name }}/stash/pop" method="POST">
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">
+                            Pop top stash
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="list-item meta">No stash entries.</div>
+                {% endif %}
+            </div>
+        </div>
 
         <div class="card" style="margin-top: 16px;">
             <div class="card-header">Tracked File Actions</div>

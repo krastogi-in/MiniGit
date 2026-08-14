@@ -11,6 +11,7 @@ Usage:
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit reset [options] <hash>      Safe reset with loss preview
     minigit serve                       Start the web UI
 """
 
@@ -173,6 +174,58 @@ def cmd_cat(args: argparse.Namespace) -> None:
     print(content)
 
 
+def _print_reset_preview(preview: dict[str, Any]) -> None:
+    """Print a short loss preview for reset."""
+    print(f"Reset preview ({preview['mode']}) on branch '{preview['branch']}'")
+    print(f"  current tip: {preview['current_tip'][:8]}")
+    print(f"  target:      {preview['target'][:8]}")
+    dropped = preview["commits_to_drop"]
+    if dropped:
+        print(f"  commits that leave the tip path ({len(dropped)}):")
+        for c in dropped:
+            print(f"    - {c['hash'][:8]}  {c['message']}")
+    else:
+        print("  commits that leave the tip path: (none)")
+    if preview["mode"] == "hard":
+        impact = preview["hard_impact"]
+        print(
+            "  hard path impact: "
+            f"overwrite={len(impact['overwritten'])} "
+            f"delete={len(impact['deleted'])} "
+            f"create={len(impact['created'])}"
+        )
+    if preview["dirty_tracked"]:
+        print(f"  dirty tracked files: {len(preview['dirty_tracked'])}")
+    if preview["staging_count"]:
+        print(f"  staged entries: {preview['staging_count']}")
+
+
+def cmd_reset(args: argparse.Namespace) -> None:
+    """Handle safe reset with dry-run preview."""
+    ops = get_ops(args)
+    mode = "mixed"
+    if args.soft:
+        mode = "soft"
+    elif args.hard:
+        mode = "hard"
+    try:
+        preview = ops.reset(
+            args.hash,
+            mode=mode,
+            dry_run=args.dry_run,
+            confirm=args.yes,
+            force=args.force,
+        )
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    _print_reset_preview(preview)
+    if args.dry_run:
+        print("Dry run only — tip unchanged. Re-run with --yes to apply.")
+    elif preview.get("applied"):
+        print(f"Reset applied ({mode}) → {preview['target'][:8]}")
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
@@ -216,6 +269,36 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
+    p_reset = sub.add_parser("reset", help="Safe reset with loss preview")
+    p_reset.add_argument("hash", help="Target commit hash (64-char hex)")
+    mode = p_reset.add_mutually_exclusive_group()
+    mode.add_argument("--soft", action="store_true", help="Move tip only")
+    mode.add_argument(
+        "--mixed",
+        action="store_true",
+        help="Move tip and clear staging (default)",
+    )
+    mode.add_argument(
+        "--hard",
+        action="store_true",
+        help="Move tip, clear staging, sync working tree",
+    )
+    p_reset.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show preview only; do not change tip",
+    )
+    p_reset.add_argument(
+        "--yes",
+        action="store_true",
+        help="Apply reset after printing preview",
+    )
+    p_reset.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow hard reset with dirty tracked files",
+    )
+
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
@@ -229,6 +312,7 @@ def main() -> None:
         "diff": cmd_diff,
         "ls": cmd_ls,
         "cat": cmd_cat,
+        "reset": cmd_reset,
         "serve": cmd_serve,
     }
     commands[args.command](args)

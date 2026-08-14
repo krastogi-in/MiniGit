@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from hashlib import sha256
 from typing import Any
@@ -18,6 +19,9 @@ from components.tree import Tree
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 logger = structlog.get_logger(__name__)
+
+_HEX_HASH = re.compile(r"^[0-9a-f]{64}$")
+_RESET_MODES = frozenset({"soft", "mixed", "hard"})
 
 
 class Operations:
@@ -304,6 +308,153 @@ class Operations:
                 ),
             })
         return diffs
+
+    def preview_reset(
+        self, target_hash: str, mode: str = "mixed"
+    ) -> dict[str, Any]:
+        """Build a loss preview for resetting the current branch tip to target."""
+        mode = mode.lower()
+        if mode not in _RESET_MODES:
+            raise ValueError(f"Invalid reset mode: {mode!r}")
+        if not _HEX_HASH.match(target_hash):
+            raise ValueError(
+                f"Invalid commit hash: expected 64-char hex string, got {target_hash!r}"
+            )
+        tip = self.db.get_ref(self.branch)
+        if not tip:
+            raise ValueError(f"Branch '{self.branch}' has no commits")
+        target = self.db.get_commit(target_hash)
+        if not target:
+            raise ValueError(f"Commit not found: {target_hash}")
+        commits_to_drop = self._commits_between_tip_and_ancestor(tip, target_hash)
+        tip_commit = self.db.get_commit(tip)
+        assert tip_commit is not None
+        hard_impact = self._hard_path_impact(
+            tip_commit["tree_hash"], target["tree_hash"]
+        )
+        dirty = self._dirty_tracked_paths(tip_commit["tree_hash"])
+        return {
+            "mode": mode,
+            "branch": self.branch,
+            "current_tip": tip,
+            "target": target_hash,
+            "commits_to_drop": commits_to_drop,
+            "hard_impact": hard_impact,
+            "dirty_tracked": dirty,
+            "staging_count": len(self.db.get_staged()),
+        }
+
+    def reset(
+        self,
+        target_hash: str,
+        mode: str = "mixed",
+        *,
+        dry_run: bool = False,
+        confirm: bool = False,
+        force: bool = False,
+    ) -> dict[str, Any]:
+        """Reset current branch tip to an ancestor commit with optional preview.
+
+        dry_run=True returns preview only. Applying requires confirm=True (--yes).
+        """
+        preview = self.preview_reset(target_hash, mode=mode)
+        if dry_run:
+            return preview
+        if not confirm:
+            raise ValueError("Pass confirm=True or CLI --yes to apply reset")
+        if mode == "hard" and preview["dirty_tracked"] and not force:
+            raise ValueError(
+                "hard reset would discard uncommitted changes; use force=True / --force"
+            )
+        self.db.set_ref(self.branch, target_hash)
+        if mode in ("mixed", "hard"):
+            self.db.clear_staging()
+        if mode == "hard":
+            target = self.db.get_commit(target_hash)
+            assert target is not None
+            tip_tree = self.db.get_commit(preview["current_tip"])
+            old_tree = tip_tree["tree_hash"] if tip_tree else ""
+            self._sync_working_tree(old_tree, target["tree_hash"])
+        logger.info(
+            "reset_applied",
+            mode=mode,
+            branch=self.branch,
+            target=target_hash[:8],
+        )
+        preview["applied"] = True
+        return preview
+
+    def _commits_between_tip_and_ancestor(
+        self, tip_hash: str, ancestor_hash: str
+    ) -> list[dict[str, Any]]:
+        """Return commits from tip down to (excluding) ancestor; error if not ancestor."""
+        dropped: list[dict[str, Any]] = []
+        current: str | None = tip_hash
+        while current:
+            if current == ancestor_hash:
+                return dropped
+            commit = self.db.get_commit(current)
+            if not commit:
+                break
+            dropped.append(
+                {
+                    "hash": commit["hash"],
+                    "message": commit["message"],
+                    "author": commit["author"],
+                }
+            )
+            current = commit["parent_hash"]
+        raise ValueError(
+            f"Target {ancestor_hash[:8]} is not an ancestor of the current tip"
+        )
+
+    def _hard_path_impact(
+        self, from_tree: str, to_tree: str
+    ) -> dict[str, list[str]]:
+        """Summarize path changes for a hard reset between two trees."""
+        old = self._flatten_tree(from_tree)
+        new = self._flatten_tree(to_tree)
+        overwritten = sorted(
+            p for p in old.keys() & new.keys() if old[p] != new[p]
+        )
+        deleted = sorted(old.keys() - new.keys())
+        created = sorted(new.keys() - old.keys())
+        return {
+            "overwritten": overwritten,
+            "deleted": deleted,
+            "created": created,
+        }
+
+    def _dirty_tracked_paths(self, tip_tree_hash: str) -> list[str]:
+        """Return tracked paths whose working-tree content differs from tip."""
+        tip_files = self._flatten_tree(tip_tree_hash)
+        dirty: list[str] = []
+        for path, blob_hash in tip_files.items():
+            full = os.path.join(self.repo_path, path)
+            expected = self.db.get_blob(blob_hash) or ""
+            if not os.path.isfile(full):
+                dirty.append(path)
+                continue
+            with open(full, encoding="utf-8") as f:
+                actual = f.read()
+            if actual != expected:
+                dirty.append(path)
+        return dirty
+
+    def _sync_working_tree(self, old_tree_hash: str, new_tree_hash: str) -> None:
+        """Write new tree blobs to disk; remove paths dropped from old tree."""
+        old_files = self._flatten_tree(old_tree_hash) if old_tree_hash else {}
+        new_files = self._flatten_tree(new_tree_hash)
+        for path in old_files.keys() - new_files.keys():
+            full = os.path.join(self.repo_path, path)
+            if os.path.isfile(full):
+                os.remove(full)
+        for path, blob_hash in new_files.items():
+            content = self.db.get_blob(blob_hash) or ""
+            full = os.path.join(self.repo_path, path)
+            os.makedirs(os.path.dirname(full) or ".", exist_ok=True)
+            with open(full, "w", encoding="utf-8") as f:
+                f.write(content)
 
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""

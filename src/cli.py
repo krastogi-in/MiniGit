@@ -9,6 +9,7 @@ Usage:
     minigit checkout <branch>           Switch to a branch
     minigit show <hash>                 Show commit details
     minigit diff <hash1> <hash2>        Diff two commits
+    minigit compare <branch> [--base]   Diff branch tip vs base branch tip
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
     minigit serve                       Start the web UI
@@ -120,10 +121,8 @@ def cmd_show(args: argparse.Namespace) -> None:
     print(f"\n    {commit['message']}\n")
 
 
-def cmd_diff(args: argparse.Namespace) -> None:
-    """Handle the 'diff' subcommand — show differences between two commits."""
-    ops = get_ops(args)
-    diffs = ops.get_diffs(args.hash1, args.hash2)
+def print_unified_diffs(diffs: list[dict[str, str]]) -> None:
+    """Print file diffs in unified-diff style with terminal colors."""
     if not diffs:
         print("No differences.")
         return
@@ -143,6 +142,23 @@ def cmd_diff(args: argparse.Namespace) -> None:
                 print(f"\033[31m{line}\033[0m")
             else:
                 print(line)
+
+
+def cmd_diff(args: argparse.Namespace) -> None:
+    """Handle the 'diff' subcommand — show differences between two commits."""
+    ops = get_ops(args)
+    print_unified_diffs(ops.get_diffs(args.hash1, args.hash2))
+
+
+def cmd_compare(args: argparse.Namespace) -> None:
+    """Handle the 'compare' subcommand — diff a branch tip against a base branch."""
+    ops = get_ops(args)
+    try:
+        diffs = ops.get_branch_diff(args.branch, args.base)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return
+    print_unified_diffs(diffs)
 
 
 def cmd_ls(args: argparse.Namespace) -> None:
@@ -210,6 +226,17 @@ def main() -> None:
     p_diff.add_argument("hash1")
     p_diff.add_argument("hash2")
 
+    p_compare = sub.add_parser(
+        "compare",
+        help="Diff branch tip vs base (tip-to-tip; not merge-base)",
+    )
+    p_compare.add_argument("branch", help="Branch to compare")
+    p_compare.add_argument(
+        "--base",
+        default="main",
+        help="Base branch (default: main)",
+    )
+
     p_ls = sub.add_parser("ls", help="List files in a tree")
     p_ls.add_argument("tree_hash", nargs="?", default=None)
 
@@ -227,6 +254,7 @@ def main() -> None:
         "checkout": cmd_checkout,
         "show": cmd_show,
         "diff": cmd_diff,
+        "compare": cmd_compare,
         "ls": cmd_ls,
         "cat": cmd_cat,
         "serve": cmd_serve,

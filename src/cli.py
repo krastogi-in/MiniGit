@@ -173,6 +173,62 @@ def cmd_cat(args: argparse.Namespace) -> None:
     print(content)
 
 
+def cmd_add(args: argparse.Namespace) -> None:
+    """Handle the 'add' subcommand — stage a file."""
+    ops = get_ops(args)
+    try:
+        blob_hash = ops.add(args.path)
+        print(f"Staged: {args.path} ({blob_hash[:8]})")
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+
+
+def cmd_commit(args: argparse.Namespace) -> None:
+    """Handle the 'commit' subcommand — create a commit."""
+    ops = get_ops(args)
+
+    if args.ai:
+        from frontend.commit_assistant import CommitMessageGenerator
+
+        try:
+            gen = CommitMessageGenerator(ops)
+            result = gen.generate()
+        except ValueError as e:
+            print(f"Error: {e}")
+            return
+
+        print(f"Suggested message: {result.message}")
+        print(f"  Type: {result.commit_type}")
+        print(f"  Files: {result.file_count}")
+        print(f"  Changes: {result.change_types}")
+
+        if not args.yes:
+            choice = input("\n[a]ccept / [e]dit / [r]eject? ").strip().lower()
+            if choice.startswith("e"):
+                message = input("Enter message: ").strip()
+                if not message:
+                    print("Aborted: empty message")
+                    return
+            elif choice.startswith("a"):
+                message = result.message
+            else:
+                print("Aborted.")
+                return
+        else:
+            message = result.message
+    elif args.message:
+        message = args.message
+    else:
+        print("Error: provide -m MESSAGE or --ai")
+        return
+
+    try:
+        commit_hash = ops.create_new_commit(message, author=args.author)
+        print(f"Committed: {commit_hash[:8]} — {message}")
+    except ValueError as e:
+        print(f"Error: {e}")
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
@@ -216,6 +272,15 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
+    p_add = sub.add_parser("add", help="Stage a file")
+    p_add.add_argument("path")
+
+    p_commit = sub.add_parser("commit", help="Create a commit")
+    p_commit.add_argument("-m", "--message", default=None, help="Commit message")
+    p_commit.add_argument("--ai", action="store_true", help="Generate message from staged diffs")
+    p_commit.add_argument("--yes", action="store_true", help="Auto-accept AI suggestion")
+    p_commit.add_argument("--author", default=None)
+
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
@@ -229,6 +294,8 @@ def main() -> None:
         "diff": cmd_diff,
         "ls": cmd_ls,
         "cat": cmd_cat,
+        "add": cmd_add,
+        "commit": cmd_commit,
         "serve": cmd_serve,
     }
     commands[args.command](args)

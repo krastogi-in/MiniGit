@@ -276,6 +276,51 @@ class Operations:
         """Return commit data dict by hash, or None if not found."""
         return self.db.get_commit(commit_hash)
 
+    def get_staged_diffs(self) -> list[dict[str, str]]:
+        """Compute diffs between staged changes and the current HEAD tree.
+
+        Returns a list of dicts with keys: path, action, old_content, new_content.
+        Raises ValueError if nothing is staged.
+        """
+        staged = self.db.get_staged()
+        if not staged:
+            raise ValueError("Nothing staged to diff")
+
+        current_files: dict[str, str] = {}
+        parent_hash = self.db.get_ref(self.branch)
+        if parent_hash:
+            parent = self.db.get_commit(parent_hash)
+            if parent:
+                current_files = self._flatten_tree(parent["tree_hash"])
+
+        diffs: list[dict[str, str]] = []
+        for entry in staged:
+            path = entry["path"]
+            action = entry["action"]
+            old_content = ""
+            new_content = ""
+
+            if action == "add":
+                old_hash = current_files.get(path)
+                if old_hash:
+                    old_content = self.db.get_blob(old_hash) or ""
+                if entry["blob_hash"]:
+                    new_content = self.db.get_blob(entry["blob_hash"]) or ""
+                status = "added" if not old_hash else "modified"
+            else:
+                old_hash = current_files.get(path)
+                if old_hash:
+                    old_content = self.db.get_blob(old_hash) or ""
+                status = "deleted"
+
+            diffs.append({
+                "path": path,
+                "action": status,
+                "old_content": old_content,
+                "new_content": new_content,
+            })
+        return diffs
+
     def get_diffs(self, hash1: str, hash2: str) -> list[dict[str, str]]:
         """Compute diff between two commits by comparing their flattened trees."""
         commit1 = self.db.get_commit(hash1)

@@ -42,6 +42,42 @@
 </div>
 {% endif %}
 
+{% if repo_status %}
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">Status</div>
+    <div class="card-body padded">
+        <div class="meta">On branch <strong>{{ repo_status.branch }}</strong> &middot; HEAD {{ repo_status.head_commit[:8] }}</div>
+        {% if repo_status.clean %}
+        <div style="margin-top: 8px;">nothing to commit, working tree clean</div>
+        {% else %}
+        {% if repo_status.staged %}
+        <div style="margin-top: 12px;"><strong>Changes to be committed</strong></div>
+        {% for change in repo_status.staged %}
+        <div class="list-item"><span class="badge added">{{ change.status }}</span> {{ change.path }}</div>
+        {% endfor %}
+        {% endif %}
+        {% if repo_status.unstaged %}
+        <div style="margin-top: 12px;"><strong>Changes not staged</strong></div>
+        {% for change in repo_status.unstaged %}
+        <div class="list-item"><span class="badge">{{ change.status }}</span> {{ change.path }}</div>
+        {% endfor %}
+        {% endif %}
+        {% if repo_status.untracked %}
+        <div style="margin-top: 12px;"><strong>Untracked</strong></div>
+        {% for path in repo_status.untracked %}
+        <div class="list-item">{{ path }}</div>
+        {% endfor %}
+        {% endif %}
+        {% endif %}
+    </div>
+</div>
+{% elif status_error %}
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">Status</div>
+    <div class="card-body padded meta">{{ status_error }}</div>
+</div>
+{% endif %}
+
 <div class="card">
     <div class="card-header">Files</div>
     <div class="card-body">

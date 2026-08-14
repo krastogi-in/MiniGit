@@ -36,7 +36,26 @@ make typecheck      # Run mypy
 make test           # Run pytest with coverage
 make check          # Run all checks (lint + typecheck + test)
 make fmt            # Auto-format code
+make verify FILE=…  # Lint + typecheck one file (see below)
 ```
+
+### Single-file verification
+
+When editing one file, verify it without running the full suite:
+
+```bash
+make verify FILE=src/components/blob.py
+make verify FILE=tests/test_blob.py
+```
+
+Direct equivalents:
+
+```bash
+ruff check path/to/file.py
+mypy path/to/file.py
+```
+
+Use `make check` before opening a PR for full lint, typecheck, tests, and boundary checks.
 
 ## Conventions
 

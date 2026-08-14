@@ -34,6 +34,9 @@ class Operations:
             db_path = os.path.join(repo_path, ".minigit", "minigit.db")
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db: SQLiteClient = SQLiteClient(db_path)
+        head = self.db.get_ref("HEAD")
+        if head:
+            self.branch = head
 
     def init_repo(self, author: str | None = None, message: str | None = None) -> str:
         """Initialize a new repository with an initial commit.
@@ -91,6 +94,7 @@ class Operations:
         if not commit_hash:
             raise ValueError(f"Current branch '{self.branch}' has no commits")
         self.db.set_ref(branch_name, commit_hash)
+        self.db.set_ref("HEAD", branch_name)
         self.branch = branch_name
         return branch_name
 
@@ -99,8 +103,16 @@ class Operations:
         commit_hash = self.db.get_ref(branch_name)
         if not commit_hash:
             raise ValueError(f"Branch '{branch_name}' does not exist")
+        self.db.set_ref("HEAD", branch_name)
         self.branch = branch_name
         return branch_name
+
+    def status(self) -> dict[str, Any]:
+        """Return current branch and staged file entries.
+
+        Keys: ``branch`` (str), ``staged`` (list of path/action/blob_hash dicts).
+        """
+        return {"branch": self.branch, "staged": self.get_staged()}
 
     def get_all_branches(self) -> list[dict[str, str]]:
         """Return all branch refs (excludes HEAD)."""

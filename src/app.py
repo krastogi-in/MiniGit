@@ -202,6 +202,17 @@ def repo_detail(repo_name: str) -> str:
     )
 
 
+@app.route("/repo/<repo_name>/status")
+def repo_status(repo_name: str) -> str:
+    """Render current branch and staged files for a repository."""
+    ops = get_ops(repo_name)
+    return render_template(
+        "status.html",
+        repo_name=repo_name,
+        status=ops.status(),
+    )
+
+
 @app.route("/repo/<repo_name>/tree/<tree_hash>")
 def browse_tree(repo_name: str, tree_hash: str) -> str:
     """Render the tree browser showing entries at a given tree hash."""

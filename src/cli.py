@@ -11,6 +11,7 @@ Usage:
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit status                      Show current branch and staged files
     minigit serve                       Start the web UI
 """
 
@@ -173,6 +174,22 @@ def cmd_cat(args: argparse.Namespace) -> None:
     print(content)
 
 
+def cmd_status(args: argparse.Namespace) -> None:
+    """Handle the 'status' subcommand — current branch and staged files."""
+    ops = get_ops(args)
+    info = ops.status()
+    print(f"On branch {info['branch']}")
+    staged = info["staged"]
+    if not staged:
+        print("nothing staged")
+        return
+    print("Staged files:")
+    for entry in staged:
+        blob = entry.get("blob_hash") or ""
+        short = blob[:8] if blob else "-"
+        print(f"  {entry['action']}\t{entry['path']}\t{short}")
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
@@ -216,6 +233,8 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
+    sub.add_parser("status", help="Show current branch and staged files")
+
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
@@ -229,6 +248,7 @@ def main() -> None:
         "diff": cmd_diff,
         "ls": cmd_ls,
         "cat": cmd_cat,
+        "status": cmd_status,
         "serve": cmd_serve,
     }
     commands[args.command](args)

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Status - {{ repo_name }} - MiniGit{% endblock %}
+
+{% block content %}
+<div class="breadcrumb">
+    <a href="/">Repositories</a> /
+    <a href="/repo/{{ repo_name }}">{{ repo_name }}</a> /
+    <strong>Status</strong>
+</div>
+
+<div class="card" style="margin-bottom: 16px;">
+    <div class="card-header">Current branch</div>
+    <div class="card-body padded">
+        <strong>{{ status.branch }}</strong>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">Staged files</div>
+    <div class="card-body">
+        {% if status.staged %}
+        {% for entry in status.staged %}
+        <div class="list-item">
+            <span class="meta">{{ entry.action }}</span>
+            <span style="margin-left: 12px;">{{ entry.path }}</span>
+            {% if entry.blob_hash %}
+            <span class="hash" style="margin-left: auto;">{{ entry.blob_hash[:8] }}</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="list-item meta">nothing staged</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

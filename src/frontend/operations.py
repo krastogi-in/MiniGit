@@ -10,7 +10,7 @@ from typing import Any
 
 import structlog
 
-from backend.sqlite_client import SQLiteClient
+from backend.sqlite_client import _HEX_HASH, SQLiteClient, _validate_hash
 from components.blob import Blob
 from components.commit import Commit
 from components.tree import Tree
@@ -18,6 +18,8 @@ from components.tree import Tree
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 logger = structlog.get_logger(__name__)
+
+TAG_REF_PREFIX = "tags/"
 
 
 class Operations:
@@ -103,9 +105,75 @@ class Operations:
         return branch_name
 
     def get_all_branches(self) -> list[dict[str, str]]:
-        """Return all branch refs (excludes HEAD)."""
+        """Return all branch refs (excludes HEAD and tags)."""
         refs = self.db.get_all_refs()
-        return [r for r in refs if r["name"] != "HEAD"]
+        return [
+            r
+            for r in refs
+            if r["name"] != "HEAD" and not r["name"].startswith(TAG_REF_PREFIX)
+        ]
+
+    def _tag_ref_name(self, tag_name: str) -> str:
+        """Map a user-facing tag name to its stored ref name."""
+        if tag_name.startswith(TAG_REF_PREFIX):
+            raise ValueError(f"Invalid tag name: {tag_name!r}")
+        ref_name = f"{TAG_REF_PREFIX}{tag_name}"
+        return ref_name
+
+    def create_tag(self, tag_name: str, commit_hash: str | None = None) -> str:
+        """Create a lightweight tag pointing to a commit. Returns the commit hash."""
+        ref_name = self._tag_ref_name(tag_name)
+        if self.db.get_ref(ref_name):
+            raise ValueError(f"Tag '{tag_name}' already exists")
+
+        if commit_hash is None:
+            commit_hash = self.db.get_ref(self.branch)
+            if not commit_hash:
+                raise ValueError(f"Current branch '{self.branch}' has no commits")
+        else:
+            _validate_hash(commit_hash, "commit hash")
+
+        if not self.db.get_commit(commit_hash):
+            raise ValueError(f"Commit not found: {commit_hash}")
+
+        self.db.set_ref(ref_name, commit_hash)
+        logger.info("tag_created", tag=tag_name, commit=commit_hash[:8])
+        return commit_hash
+
+    def list_tags(self) -> list[dict[str, str]]:
+        """Return all tags as {name, commit_hash} dicts (display names, no prefix)."""
+        refs = self.db.get_all_refs()
+        tags: list[dict[str, str]] = []
+        for ref in refs:
+            if ref["name"].startswith(TAG_REF_PREFIX):
+                tags.append({
+                    "name": ref["name"][len(TAG_REF_PREFIX) :],
+                    "commit_hash": ref["commit_hash"],
+                })
+        return sorted(tags, key=lambda t: t["name"])
+
+    def delete_tag(self, tag_name: str) -> None:
+        """Delete a lightweight tag. Raises ValueError if the tag does not exist."""
+        ref_name = self._tag_ref_name(tag_name)
+        if not self.db.get_ref(ref_name):
+            raise ValueError(f"Tag '{tag_name}' does not exist")
+        self.db.delete_ref(ref_name)
+        logger.info("tag_deleted", tag=tag_name)
+
+    def resolve_ref(self, ref: str) -> str | None:
+        """Resolve a commit hash, tag name, or branch name to a commit hash."""
+        if _HEX_HASH.match(ref):
+            return ref if self.db.get_commit(ref) else None
+
+        if not ref.startswith(TAG_REF_PREFIX):
+            tag_hash = self.db.get_ref(f"{TAG_REF_PREFIX}{ref}")
+            if tag_hash:
+                return tag_hash
+
+        branch_hash = self.db.get_ref(ref)
+        if branch_hash and ref != "HEAD":
+            return branch_hash
+        return None
 
     def delete_branch(self, branch_name: str) -> None:
         """Delete a branch ref. Cannot delete 'main' or the current branch."""
@@ -123,7 +191,7 @@ class Operations:
         full_path = os.path.join(self.repo_path, file_path)
         if not os.path.isfile(full_path):
             raise FileNotFoundError(f"File not found: {file_path}")
-        with open(full_path, "r") as f:
+        with open(full_path) as f:
             content = f.read()
         blob = Blob(content)
         self.db.store_blob(blob.get_hash(), blob.get_data())

@@ -11,6 +11,10 @@ Usage:
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit tag                         List tags
+    minigit tag <name>                  Tag current HEAD
+    minigit tag <name> <commit-hash>    Tag a specific commit
+    minigit tag -d <name>               Delete a tag
     minigit serve                       Start the web UI
 """
 
@@ -107,7 +111,11 @@ def cmd_checkout(args: argparse.Namespace) -> None:
 def cmd_show(args: argparse.Namespace) -> None:
     """Handle the 'show' subcommand — display commit details."""
     ops = get_ops(args)
-    commit = ops.get_commit(args.hash)
+    commit_hash = ops.resolve_ref(args.hash)
+    if not commit_hash:
+        print(f"Error: ref {args.hash} not found")
+        return
+    commit = ops.get_commit(commit_hash)
     if not commit:
         print(f"Error: commit {args.hash} not found")
         return
@@ -173,6 +181,38 @@ def cmd_cat(args: argparse.Namespace) -> None:
     print(content)
 
 
+def cmd_tag(args: argparse.Namespace) -> None:
+    """Handle the 'tag' subcommand — create, list, or delete lightweight tags."""
+    ops = get_ops(args)
+    if args.delete:
+        if not args.name:
+            print("Error: tag name required for delete")
+            sys.exit(1)
+        try:
+            ops.delete_tag(args.name)
+            print(f"Deleted tag '{args.name}'")
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+        return
+
+    if args.name is None:
+        tags = ops.list_tags()
+        if not tags:
+            print("No tags.")
+            return
+        for tag in tags:
+            print(f"{tag['name']}  ({tag['commit_hash'][:8]})")
+        return
+
+    try:
+        commit_hash = ops.create_tag(args.name, args.commit_hash)
+        print(f"Tagged '{args.name}' at {commit_hash[:8]}")
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
@@ -216,6 +256,11 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
+    p_tag = sub.add_parser("tag", help="List, create, or delete tags")
+    p_tag.add_argument("name", nargs="?", default=None, help="Tag name to create or delete")
+    p_tag.add_argument("commit_hash", nargs="?", default=None, help="Commit to tag")
+    p_tag.add_argument("-d", "--delete", action="store_true", help="Delete a tag")
+
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
@@ -229,6 +274,7 @@ def main() -> None:
         "diff": cmd_diff,
         "ls": cmd_ls,
         "cat": cmd_cat,
+        "tag": cmd_tag,
         "serve": cmd_serve,
     }
     commands[args.command](args)

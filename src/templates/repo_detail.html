@@ -25,6 +25,21 @@
     </form>
 </div>
 
+<div style="display: flex; gap: 12px; margin-bottom: 16px; align-items: center; flex-wrap: wrap;">
+    <form action="/repo/{{ repo_name }}/merge" method="POST" class="inline-form">
+        <input type="hidden" name="target_branch" value="{{ branch }}">
+        <label for="source_branch">Merge into <strong>{{ branch }}</strong> from:</label>
+        <select id="source_branch" name="source_branch" required>
+            {% for b in branches %}
+            {% if b.name != branch %}
+            <option value="{{ b.name }}">{{ b.name }}</option>
+            {% endif %}
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn">Merge</button>
+    </form>
+</div>
+
 {% if latest_commit %}
 <div class="card" style="margin-bottom: 16px;">
     <div class="card-header">

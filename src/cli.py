@@ -11,6 +11,7 @@ Usage:
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit revert <commit_hash>        Revert a commit on the current branch
     minigit serve                       Start the web UI
 """
 
@@ -173,6 +174,18 @@ def cmd_cat(args: argparse.Namespace) -> None:
     print(content)
 
 
+def cmd_revert(args: argparse.Namespace) -> None:
+    """Handle the 'revert' subcommand — undo a commit on the current branch."""
+    ops = get_ops(args)
+    try:
+        new_hash = ops.revert_commit(args.hash)
+        print(f"Reverted commit {args.hash[:8]}")
+        print(f"New commit: {new_hash[:8]}")
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
@@ -216,6 +229,9 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
+    p_revert = sub.add_parser("revert", help="Revert a commit on the current branch")
+    p_revert.add_argument("hash")
+
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
@@ -229,6 +245,7 @@ def main() -> None:
         "diff": cmd_diff,
         "ls": cmd_ls,
         "cat": cmd_cat,
+        "revert": cmd_revert,
         "serve": cmd_serve,
     }
     commands[args.command](args)

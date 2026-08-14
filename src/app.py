@@ -356,6 +356,26 @@ def stage_delete(repo_name: str) -> Any:
     return redirect(url_for("working_dir", repo_name=repo_name))
 
 
+@app.route("/repo/<repo_name>/suggest-message")
+def suggest_message(repo_name: str) -> Any:
+    """Return a JSON-suggested commit message from staged diffs."""
+    ops = get_ops(repo_name)
+    try:
+        from frontend.commit_assistant import CommitMessageGenerator
+
+        gen = CommitMessageGenerator(ops)
+        result = gen.generate()
+        return jsonify({
+            "message": result.message,
+            "commit_type": result.commit_type,
+            "summary": result.summary,
+            "file_count": result.file_count,
+            "change_types": result.change_types,
+        })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route("/repo/<repo_name>/commit", methods=["POST"])
 def create_commit(repo_name: str) -> Any:
     """Handle commit creation form submission."""

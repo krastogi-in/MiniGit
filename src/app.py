@@ -192,6 +192,14 @@ def repo_detail(repo_name: str) -> str:
     if latest:
         tree_entries = ops.browse_tree(latest["tree_hash"])
 
+    repo_status = None
+    status_error: str | None = None
+    try:
+        ops.checkout_branch(branch)
+        repo_status = ops.get_status()
+    except ValueError as exc:
+        status_error = str(exc)
+
     return render_template(
         "repo_detail.html",
         repo_name=repo_name,
@@ -199,6 +207,8 @@ def repo_detail(repo_name: str) -> str:
         branches=branches,
         latest_commit=latest,
         tree_entries=tree_entries,
+        repo_status=repo_status,
+        status_error=status_error,
     )
 
 

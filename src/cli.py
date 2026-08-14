@@ -11,6 +11,7 @@ Usage:
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit status                      Show staged, unstaged, and untracked changes
     minigit serve                       Start the web UI
 """
 
@@ -20,11 +21,14 @@ import argparse
 import difflib
 import os
 import sys
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 sys.path.insert(0, os.path.dirname(__file__))
 
 from frontend.operations import Operations
+
+if TYPE_CHECKING:
+    from frontend.status import RepoStatus
 
 
 def find_repo(start_path: str | None = None) -> str | None:
@@ -173,6 +177,40 @@ def cmd_cat(args: argparse.Namespace) -> None:
     print(content)
 
 
+def format_status(status: RepoStatus) -> str:
+    """Format a RepoStatus for CLI output."""
+    lines: list[str] = []
+    lines.append(f"On branch {status.branch}")
+    if status.head_commit:
+        lines.append(f"HEAD commit {status.head_commit[:8]}")
+    if status.staged:
+        lines.append("\nChanges to be committed:")
+        for change in status.staged:
+            lines.append(f"  {change.status}:   {change.path}")
+    if status.unstaged:
+        lines.append("\nChanges not staged for commit:")
+        for change in status.unstaged:
+            lines.append(f"  {change.status}:   {change.path}")
+    if status.untracked:
+        lines.append("\nUntracked files:")
+        for path in status.untracked:
+            lines.append(f"  {path}")
+    if status.clean:
+        lines.append("\nnothing to commit, working tree clean")
+    return "\n".join(lines)
+
+
+def cmd_status(args: argparse.Namespace) -> None:
+    """Handle the 'status' subcommand — show repository change summary."""
+    ops = get_ops(args)
+    try:
+        status = ops.get_status()
+        print(format_status(status))
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
@@ -216,6 +254,8 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
+    sub.add_parser("status", help="Show staged, unstaged, and untracked changes")
+
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
@@ -229,6 +269,7 @@ def main() -> None:
         "diff": cmd_diff,
         "ls": cmd_ls,
         "cat": cmd_cat,
+        "status": cmd_status,
         "serve": cmd_serve,
     }
     commands[args.command](args)

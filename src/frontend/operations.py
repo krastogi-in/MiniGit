@@ -6,7 +6,7 @@ import json
 import os
 import sys
 from hashlib import sha256
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -14,6 +14,9 @@ from backend.sqlite_client import SQLiteClient
 from components.blob import Blob
 from components.commit import Commit
 from components.tree import Tree
+
+if TYPE_CHECKING:
+    from frontend.status import RepoStatus
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -34,6 +37,7 @@ class Operations:
             db_path = os.path.join(repo_path, ".minigit", "minigit.db")
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db: SQLiteClient = SQLiteClient(db_path)
+        self._sync_branch_from_head()
 
     def init_repo(self, author: str | None = None, message: str | None = None) -> str:
         """Initialize a new repository with an initial commit.
@@ -92,6 +96,7 @@ class Operations:
             raise ValueError(f"Current branch '{self.branch}' has no commits")
         self.db.set_ref(branch_name, commit_hash)
         self.branch = branch_name
+        self.db.set_ref("HEAD", branch_name)
         return branch_name
 
     def checkout_branch(self, branch_name: str) -> str:
@@ -100,7 +105,14 @@ class Operations:
         if not commit_hash:
             raise ValueError(f"Branch '{branch_name}' does not exist")
         self.branch = branch_name
+        self.db.set_ref("HEAD", branch_name)
         return branch_name
+
+    def _sync_branch_from_head(self) -> None:
+        """Load current branch name from the HEAD ref when present."""
+        from frontend.status import sync_branch_from_head
+
+        sync_branch_from_head(self)
 
     def get_all_branches(self) -> list[dict[str, str]]:
         """Return all branch refs (excludes HEAD)."""
@@ -304,6 +316,15 @@ class Operations:
                 ),
             })
         return diffs
+
+    def get_status(self) -> RepoStatus:
+        """Return staged, unstaged, and untracked changes for the current branch."""
+        from frontend.status import compute_repo_status
+
+        status: RepoStatus = compute_repo_status(self)
+        if status.head_commit is None:
+            raise ValueError(f"Current branch '{self.branch}' has no commits")
+        return status
 
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""

@@ -305,6 +305,81 @@ class Operations:
             })
         return diffs
 
+    def get_commit_graph_data(self, max_commits: int = 50) -> dict[str, Any]:
+        """Build layout data for the web commit graph (truncated, lane-assigned)."""
+        all_commits = self.db.get_all_commits()
+        total = len(all_commits)
+        truncated = total > max_commits
+        commits = all_commits[:max_commits] if truncated else all_commits
+        included = {c["hash"] for c in commits}
+
+        branches = [b for b in self.get_all_branches() if b["name"] != "HEAD"]
+        tips_by_hash: dict[str, list[str]] = {}
+        for b in branches:
+            tips_by_hash.setdefault(b["commit_hash"], []).append(b["name"])
+
+        lane_by_hash: dict[str, int] = {}
+        row_by_hash: dict[str, int] = {}
+        for lane, branch in enumerate(branches):
+            h: str | None = branch["commit_hash"]
+            depth = 0
+            while h and h in included:
+                if h not in lane_by_hash:
+                    lane_by_hash[h] = lane
+                row_by_hash[h] = max(row_by_hash.get(h, 0), depth)
+                commit = self.db.get_commit(h)
+                h = commit["parent_hash"] if commit else None
+                depth += 1
+
+        lane_width, row_height = 140, 70
+        nodes: list[dict[str, Any]] = []
+        for c in commits:
+            h = c["hash"]
+            lane = lane_by_hash.get(h, 0)
+            row = row_by_hash.get(h, 0)
+            nodes.append({
+                "hash": h,
+                "message": c["message"],
+                "author": c["author"],
+                "timestamp": c["timestamp"],
+                "parent_hash": c.get("parent_hash"),
+                "lane": lane,
+                "row": row,
+                "x": lane * lane_width + 80,
+                "y": row * row_height + 50,
+                "branch_names": tips_by_hash.get(h, []),
+            })
+
+        edges: list[dict[str, Any]] = []
+        pos = {n["hash"]: (n["x"], n["y"]) for n in nodes}
+        for c in commits:
+            parent = c.get("parent_hash")
+            child = c["hash"]
+            if parent and parent in pos:
+                x1, y1 = pos[child]
+                x2, y2 = pos[parent]
+                edges.append({"x1": x1, "y1": y1 + 12, "x2": x2, "y2": y2 - 12})
+
+        lane_count = max(lane_by_hash.values()) + 1 if lane_by_hash else 1
+        row_count = max(row_by_hash.values()) + 1 if row_by_hash else 0
+        width = lane_count * lane_width + 160
+        height = max(row_count * row_height + 100, 120)
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "branch_tips": [
+                {"name": b["name"], "hash": b["commit_hash"]}
+                for b in branches
+            ],
+            "truncated": truncated,
+            "total_commits": total,
+            "lane_count": lane_count,
+            "row_count": row_count,
+            "width": width,
+            "height": height,
+        }
+
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""
         entries_json = self.db.get_tree(tree_hash)

@@ -253,3 +253,41 @@ class TestOperations:
         ops.create_new_commit("commit", author="Tester")
         staged = ops.db.get_staged()
         assert len(staged) == 0
+
+    def test_get_commit_graph_data_single_commit(self) -> None:
+        """Graph data includes the initial commit on lane 0."""
+        ops = self._init_ops()
+        graph = ops.get_commit_graph_data()
+        assert len(graph["nodes"]) == 1
+        assert graph["nodes"][0]["lane"] == 0
+        assert graph["truncated"] is False
+        assert "main" in graph["nodes"][0]["branch_names"]
+
+    def test_get_commit_graph_data_branch_lanes(self) -> None:
+        """Diverged branches assign separate lanes in graph data."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        ops.checkout_branch("feature")
+        new_file = os.path.join(self.tmpdir, "feature.txt")
+        with open(new_file, "w") as f:
+            f.write("feature\n")
+        ops.add("feature.txt")
+        ops.create_new_commit("on feature", author="Tester")
+        graph = ops.get_commit_graph_data()
+        lanes = {n["hash"]: n["lane"] for n in graph["nodes"]}
+        tips = {t["name"]: t["hash"] for t in graph["branch_tips"]}
+        assert lanes[tips["feature"]] != lanes[tips["main"]]
+
+    def test_get_commit_graph_data_truncation(self) -> None:
+        """Graph truncates when more than max_commits exist."""
+        ops = self._init_ops()
+        for i in range(3):
+            path = os.path.join(self.tmpdir, f"file{i}.txt")
+            with open(path, "w") as f:
+                f.write(f"content {i}\n")
+            ops.add(f"file{i}.txt")
+            ops.create_new_commit(f"commit {i}", author="Tester")
+        graph = ops.get_commit_graph_data(max_commits=2)
+        assert graph["truncated"] is True
+        assert len(graph["nodes"]) == 2
+        assert graph["total_commits"] == 4

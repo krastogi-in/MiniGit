@@ -7,6 +7,7 @@ Usage:
     minigit branch                      List branches
     minigit branch <name>               Create a new branch
     minigit checkout <branch>           Switch to a branch
+    minigit rebase <target-branch>      Rebase current branch onto a branch
     minigit show <hash>                 Show commit details
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
@@ -102,6 +103,30 @@ def cmd_checkout(args: argparse.Namespace) -> None:
         print(f"Switched to branch '{args.branch_name}'")
     except ValueError as e:
         print(f"Error: {e}")
+
+
+def cmd_rebase(args: argparse.Namespace) -> None:
+    """Handle the 'rebase' subcommand — replay current branch onto another."""
+    ops = get_ops(args)
+    try:
+        result = ops.rebase_branch(args.target_branch)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return
+
+    if result["status"] == "up_to_date":
+        print(f"Branch '{result['branch']}' is already up to date with '{result['target_branch']}'")
+        return
+    if result["status"] == "fast_forward":
+        print(f"Fast-forwarded '{result['branch']}' to '{result['target_branch']}'")
+        return
+
+    print(
+        f"Rebased '{result['branch']}' onto '{result['target_branch']}' "
+        f"with {result['replayed']} replayed commit(s)"
+    )
+    if result["skipped"]:
+        print(f"Skipped {result['skipped']} empty commit(s)")
 
 
 def cmd_show(args: argparse.Namespace) -> None:
@@ -203,6 +228,9 @@ def main() -> None:
     p_checkout = sub.add_parser("checkout", help="Switch branch")
     p_checkout.add_argument("branch_name")
 
+    p_rebase = sub.add_parser("rebase", help="Rebase current branch onto another branch")
+    p_rebase.add_argument("target_branch")
+
     p_show = sub.add_parser("show", help="Show commit details")
     p_show.add_argument("hash")
 
@@ -225,6 +253,7 @@ def main() -> None:
         "log": cmd_log,
         "branch": cmd_branch,
         "checkout": cmd_checkout,
+        "rebase": cmd_rebase,
         "show": cmd_show,
         "diff": cmd_diff,
         "ls": cmd_ls,

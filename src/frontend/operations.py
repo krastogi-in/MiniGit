@@ -6,7 +6,7 @@ import json
 import os
 import sys
 from hashlib import sha256
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -14,6 +14,7 @@ from backend.sqlite_client import SQLiteClient
 from components.blob import Blob
 from components.commit import Commit
 from components.tree import Tree
+from frontend.rebase import RebaseEngine
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -29,11 +30,11 @@ class Operations:
 
     def __init__(self, repo_path: str, db_path: str | None = None) -> None:
         self.repo_path: str = repo_path
-        self.branch: str = "main"
         if db_path is None:
             db_path = os.path.join(repo_path, ".minigit", "minigit.db")
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.db: SQLiteClient = SQLiteClient(db_path)
+        self.branch: str = self.db.get_ref("HEAD") or "main"
 
     def init_repo(self, author: str | None = None, message: str | None = None) -> str:
         """Initialize a new repository with an initial commit.
@@ -64,7 +65,7 @@ class Operations:
         self.db.set_ref("main", commit_obj.get_hash())
         self.db.set_ref("HEAD", "main")
         logger.info("repo_initialized", path=self.repo_path)
-        return commit_obj.get_hash()
+        return cast("str", commit_obj.get_hash())
 
     def _store_tree(self, tree_obj: Tree) -> None:
         """Recursively persist a tree and all its child blobs/subtrees."""
@@ -91,7 +92,6 @@ class Operations:
         if not commit_hash:
             raise ValueError(f"Current branch '{self.branch}' has no commits")
         self.db.set_ref(branch_name, commit_hash)
-        self.branch = branch_name
         return branch_name
 
     def checkout_branch(self, branch_name: str) -> str:
@@ -100,6 +100,7 @@ class Operations:
         if not commit_hash:
             raise ValueError(f"Branch '{branch_name}' does not exist")
         self.branch = branch_name
+        self.db.set_ref("HEAD", branch_name)
         return branch_name
 
     def get_all_branches(self) -> list[dict[str, str]]:
@@ -123,12 +124,12 @@ class Operations:
         full_path = os.path.join(self.repo_path, file_path)
         if not os.path.isfile(full_path):
             raise FileNotFoundError(f"File not found: {file_path}")
-        with open(full_path, "r") as f:
+        with open(full_path) as f:
             content = f.read()
         blob = Blob(content)
         self.db.store_blob(blob.get_hash(), blob.get_data())
         self.db.stage_file(file_path, "add", blob.get_hash())
-        return blob.get_hash()
+        return cast("str", blob.get_hash())
 
     def delete_file(self, file_path: str) -> None:
         """Stage a file for deletion in the next commit."""
@@ -189,7 +190,7 @@ class Operations:
         self.db.set_ref(self.branch, commit_hash)
         self.db.clear_staging()
         logger.info("commit_created", hash=commit_hash[:8], message=message)
-        return commit_hash
+        return cast("str", commit_hash)
 
     def _build_tree_from_flat(self, flat_files: dict[str, str]) -> str:
         """Build nested tree objects from a flat {path: blob_hash} dict. Returns root hash."""
@@ -237,7 +238,7 @@ class Operations:
 
     def get_staged(self) -> list[dict[str, Any]]:
         """Return the list of currently staged file entries."""
-        return self.db.get_staged()
+        return cast("list[dict[str, Any]]", self.db.get_staged())
 
     def get_working_dir_files(self, subdir: str = "") -> list[dict[str, str]]:
         """List files and directories in the working directory for the UI explorer."""
@@ -266,15 +267,15 @@ class Operations:
         entries_json = self.db.get_tree(tree_hash)
         if not entries_json:
             return []
-        return json.loads(entries_json)
+        return cast("list[dict[str, str]]", json.loads(entries_json))
 
     def get_blob_content(self, blob_hash: str) -> str | None:
         """Return file content for a blob hash, or None if not found."""
-        return self.db.get_blob(blob_hash)
+        return cast("str | None", self.db.get_blob(blob_hash))
 
     def get_commit(self, commit_hash: str) -> dict[str, Any] | None:
         """Return commit data dict by hash, or None if not found."""
-        return self.db.get_commit(commit_hash)
+        return cast("dict[str, Any] | None", self.db.get_commit(commit_hash))
 
     def get_diffs(self, hash1: str, hash2: str) -> list[dict[str, str]]:
         """Compute diff between two commits by comparing their flattened trees."""
@@ -304,6 +305,10 @@ class Operations:
                 ),
             })
         return diffs
+
+    def rebase_branch(self, target_branch: str) -> dict[str, Any]:
+        """Rebase the current branch onto another named branch."""
+        return cast("dict[str, Any]", RebaseEngine(self).rebase_onto(target_branch))
 
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""

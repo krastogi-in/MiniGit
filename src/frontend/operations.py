@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from hashlib import sha256
 from typing import Any
@@ -304,6 +305,51 @@ class Operations:
                 ),
             })
         return diffs
+
+    def get_clone_count(self) -> int:
+        """Return how many times this repository has been cloned."""
+        return int(self.db.get_clone_count())
+
+    def clone_repo(self, dest_path: str) -> int:
+        """Copy this MiniGit repo to dest_path and increment the source clone counter.
+
+        Returns the new clone count on the source repository.
+        Raises ValueError if source is invalid or dest already contains a MiniGit repo.
+        """
+        source = os.path.abspath(self.repo_path)
+        dest = os.path.abspath(dest_path)
+        minigit_dir = os.path.join(source, ".minigit")
+        if not os.path.isdir(minigit_dir):
+            raise ValueError(f"Not a MiniGit repository: {source}")
+        if source == dest:
+            raise ValueError("Destination path must differ from source")
+        if os.path.isdir(os.path.join(dest, ".minigit")):
+            raise ValueError(f"Destination already is a MiniGit repository: {dest}")
+        if os.path.exists(dest) and os.listdir(dest):
+            raise ValueError(f"Destination is not empty: {dest}")
+
+        self.db.close()
+        try:
+            if os.path.exists(dest):
+                # Empty directory — copy contents into it
+                for name in os.listdir(source):
+                    src_item = os.path.join(source, name)
+                    dst_item = os.path.join(dest, name)
+                    if os.path.isdir(src_item):
+                        shutil.copytree(src_item, dst_item)
+                    else:
+                        shutil.copy2(src_item, dst_item)
+            else:
+                shutil.copytree(source, dest)
+        except OSError as exc:
+            # Re-open source DB before surfacing the error
+            self.db = SQLiteClient(os.path.join(source, ".minigit", "minigit.db"))
+            raise ValueError(f"Clone failed: {exc}") from exc
+
+        self.db = SQLiteClient(os.path.join(source, ".minigit", "minigit.db"))
+        count = int(self.db.increment_clone_count())
+        logger.info("repo_cloned", source=source, dest=dest, clone_count=count)
+        return count
 
     def _flatten_tree(self, tree_hash: str, prefix: str = "") -> dict[str, str]:
         """Walk a tree recursively, returning a flat {path: blob_hash} mapping."""

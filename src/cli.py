@@ -11,6 +11,8 @@ Usage:
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
     minigit cat <blob_hash>             Show file content
+    minigit clone <source> [dest]       Clone a repository
+    minigit clone-stats                 Show how many times this repo was cloned
     minigit serve                       Start the web UI
 """
 
@@ -41,6 +43,14 @@ def find_repo(start_path: str | None = None) -> str | None:
 
 def get_ops(args: argparse.Namespace) -> Operations:
     """Resolve the repository path and return an Operations instance."""
+    if args.command == "clone":
+        source = os.path.abspath(args.source)
+        if not os.path.isdir(os.path.join(source, ".minigit")):
+            print(f"Error: not a MiniGit repository: {source}")
+            sys.exit(1)
+        db_path = os.path.join(source, ".minigit", "minigit.db")
+        return Operations(source, db_path)
+
     repo_path = find_repo()
     if not repo_path and args.command != "init":
         print("Error: not a MiniGit repository (no .minigit found)")
@@ -173,6 +183,30 @@ def cmd_cat(args: argparse.Namespace) -> None:
     print(content)
 
 
+def cmd_clone(args: argparse.Namespace) -> None:
+    """Handle the 'clone' subcommand — copy a MiniGit repository."""
+    ops = get_ops(args)
+    source = os.path.abspath(args.source)
+    if args.dest:
+        dest = os.path.abspath(args.dest)
+    else:
+        dest = os.path.join(os.getcwd(), os.path.basename(source))
+    try:
+        count = ops.clone_repo(dest)
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    print(f"Cloned MiniGit repository to {dest}")
+    print(f"Clone count (source): {count}")
+
+
+def cmd_clone_stats(args: argparse.Namespace) -> None:
+    """Handle the 'clone-stats' subcommand — show clone count."""
+    ops = get_ops(args)
+    count = ops.get_clone_count()
+    print(f"Clone count: {count}")
+
+
 def cmd_serve(args: argparse.Namespace) -> None:
     """Handle the 'serve' subcommand — start the Flask web UI."""
     from app import app
@@ -216,6 +250,12 @@ def main() -> None:
     p_cat = sub.add_parser("cat", help="Show blob content")
     p_cat.add_argument("blob_hash")
 
+    p_clone = sub.add_parser("clone", help="Clone a MiniGit repository")
+    p_clone.add_argument("source", help="Source repository path")
+    p_clone.add_argument("dest", nargs="?", default=None, help="Destination path")
+
+    sub.add_parser("clone-stats", help="Show how many times this repo was cloned")
+
     p_serve = sub.add_parser("serve", help="Start web UI")
     p_serve.add_argument("--port", type=int, default=5000)
 
@@ -229,6 +269,8 @@ def main() -> None:
         "diff": cmd_diff,
         "ls": cmd_ls,
         "cat": cmd_cat,
+        "clone": cmd_clone,
+        "clone-stats": cmd_clone_stats,
         "serve": cmd_serve,
     }
     commands[args.command](args)

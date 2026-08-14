@@ -78,6 +78,10 @@ class SQLiteClient:
                 action TEXT NOT NULL,
                 blob_hash TEXT
             );
+            CREATE TABLE IF NOT EXISTS meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
         """)
         self.conn.commit()
 
@@ -209,6 +213,32 @@ class SQLiteClient:
         """Remove all entries from the staging area."""
         self.cursor.execute("DELETE FROM staging")
         self.conn.commit()
+
+    def get_clone_count(self) -> int:
+        """Return how many times this repo has been cloned (default 0)."""
+        self.cursor.execute(
+            "SELECT value FROM meta WHERE key = ?",
+            ("clone_count",),
+        )
+        row = self.cursor.fetchone()
+        if not row:
+            return 0
+        try:
+            return int(row["value"])
+        except (TypeError, ValueError):
+            return 0
+
+    def increment_clone_count(self) -> int:
+        """Increment clone_count by 1 and return the new value."""
+        current = self.get_clone_count()
+        new_value = current + 1
+        self.cursor.execute(
+            "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+            ("clone_count", str(new_value)),
+        )
+        self.conn.commit()
+        logger.info("clone_count_incremented", count=new_value)
+        return new_value
 
     def close(self) -> None:
         """Close the database connection."""

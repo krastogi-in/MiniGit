@@ -65,6 +65,7 @@ class SQLiteClient:
                 hash TEXT PRIMARY KEY,
                 tree_hash TEXT NOT NULL,
                 parent_hash TEXT,
+                parent_hash2 TEXT,
                 author TEXT NOT NULL,
                 message TEXT NOT NULL,
                 timestamp TEXT NOT NULL
@@ -79,7 +80,15 @@ class SQLiteClient:
                 blob_hash TEXT
             );
         """)
+        self._ensure_commit_parent_hash2_column()
         self.conn.commit()
+
+    def _ensure_commit_parent_hash2_column(self) -> None:
+        """Add second parent column for merge commits if missing."""
+        self.cursor.execute("PRAGMA table_info(commits)")
+        columns = [row["name"] for row in self.cursor.fetchall()]
+        if "parent_hash2" not in columns:
+            self.cursor.execute("ALTER TABLE commits ADD COLUMN parent_hash2 TEXT")
 
     def store_blob(self, hash: str, data: str) -> None:
         """Persist a blob by its hash. Ignores duplicates."""
@@ -121,6 +130,7 @@ class SQLiteClient:
         hash: str,
         tree_hash: str,
         parent_hash: str | None,
+        parent_hash2: str | None,
         author: str,
         message: str,
         timestamp: str,
@@ -130,14 +140,16 @@ class SQLiteClient:
         _validate_hash(tree_hash, "tree hash")
         if parent_hash is not None:
             _validate_hash(parent_hash, "parent hash")
+        if parent_hash2 is not None:
+            _validate_hash(parent_hash2, "second parent hash")
         _validate_str(author, "author", max_len=200)
         _validate_str(message, "commit message", max_len=5000)
         _validate_str(timestamp, "timestamp", max_len=50)
         self.cursor.execute(
             "INSERT OR IGNORE INTO commits "
-            "(hash, tree_hash, parent_hash, author, message, timestamp) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (hash, tree_hash, parent_hash, author, message, timestamp),
+            "(hash, tree_hash, parent_hash, parent_hash2, author, message, timestamp) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (hash, tree_hash, parent_hash, parent_hash2, author, message, timestamp),
         )
         self.conn.commit()
         logger.info("stored_commit", hash=hash[:8], message=message)

@@ -7,6 +7,7 @@ Usage:
     minigit branch                      List branches
     minigit branch <name>               Create a new branch
     minigit checkout <branch>           Switch to a branch
+    minigit merge <source-branch>       Merge source into current branch
     minigit show <hash>                 Show commit details
     minigit diff <hash1> <hash2>        Diff two commits
     minigit ls [tree_hash]              List files at a tree
@@ -120,6 +121,24 @@ def cmd_show(args: argparse.Namespace) -> None:
     print(f"\n    {commit['message']}\n")
 
 
+def cmd_merge(args: argparse.Namespace) -> None:
+    """Handle the 'merge' subcommand — merge source into current branch."""
+    ops = get_ops(args)
+    try:
+        result = ops.merge(args.source_branch)
+    except ValueError as e:
+        print(f"Error: {e}")
+        return
+
+    status = result["status"]
+    if status == "already-up-to-date":
+        print("Already up to date.")
+    elif status == "fast-forward":
+        print(f"Fast-forwarded to {result['commit_hash'][:8]}")
+    else:
+        print(f"Merge commit created: {result['commit_hash'][:8]}")
+
+
 def cmd_diff(args: argparse.Namespace) -> None:
     """Handle the 'diff' subcommand — show differences between two commits."""
     ops = get_ops(args)
@@ -203,6 +222,9 @@ def main() -> None:
     p_checkout = sub.add_parser("checkout", help="Switch branch")
     p_checkout.add_argument("branch_name")
 
+    p_merge = sub.add_parser("merge", help="Merge source branch into current branch")
+    p_merge.add_argument("source_branch")
+
     p_show = sub.add_parser("show", help="Show commit details")
     p_show.add_argument("hash")
 
@@ -225,6 +247,7 @@ def main() -> None:
         "log": cmd_log,
         "branch": cmd_branch,
         "checkout": cmd_checkout,
+        "merge": cmd_merge,
         "show": cmd_show,
         "diff": cmd_diff,
         "ls": cmd_ls,

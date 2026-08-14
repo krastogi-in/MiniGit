@@ -49,7 +49,7 @@ class TestSQLiteClient:
         """Stored commit is retrievable with all fields intact."""
         ch = "e" * 64
         th = "f" * 64
-        self.db.store_commit(ch, th, None, "Alice", "init", "2026-01-01")
+        self.db.store_commit(ch, th, None, None, "Alice", "init", "2026-01-01")
         c = self.db.get_commit(ch)
         assert c["hash"] == ch
         assert c["tree_hash"] == th
@@ -103,10 +103,29 @@ class TestSQLiteClient:
         h2 = "b" * 64
         t1 = "c" * 64
         t2 = "d" * 64
-        self.db.store_commit(h1, t1, None, "A", "first", "2026-01-01")
-        self.db.store_commit(h2, t2, h1, "A", "second", "2026-01-02")
+        self.db.store_commit(h1, t1, None, None, "A", "first", "2026-01-01")
+        self.db.store_commit(h2, t2, h1, None, "A", "second", "2026-01-02")
         commits = self.db.get_all_commits()
         assert len(commits) == 2
+
+    def test_store_commit_with_second_parent(self) -> None:
+        """Merge commits persist both parent hashes."""
+        commit_hash = "e" * 64
+        tree_hash = "f" * 64
+        parent1 = "1" * 64
+        parent2 = "2" * 64
+        self.db.store_commit(
+            commit_hash,
+            tree_hash,
+            parent1,
+            parent2,
+            "Merge Bot",
+            "merge commit",
+            "2026-01-03",
+        )
+        commit = self.db.get_commit(commit_hash)
+        assert commit["parent_hash"] == parent1
+        assert commit["parent_hash2"] == parent2
 
 
 class TestValidation:
@@ -159,7 +178,7 @@ class TestValidation:
         """Non-string author raises TypeError."""
         try:
             self.db.store_commit(
-                "a" * 64, "b" * 64, None, 12345, "msg", "ts")
+                "a" * 64, "b" * 64, None, None, 12345, "msg", "ts")
             assert False, "Should have raised TypeError"
         except TypeError:
             pass
@@ -168,7 +187,7 @@ class TestValidation:
         """Message exceeding max length raises ValueError."""
         try:
             self.db.store_commit(
-                "a" * 64, "b" * 64, None, "A", "x" * 5001, "ts")
+                "a" * 64, "b" * 64, None, None, "A", "x" * 5001, "ts")
             assert False, "Should have raised ValueError"
         except ValueError:
             pass

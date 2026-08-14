@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from datetime import datetime
 from hashlib import sha256
 from typing import Any
 
@@ -56,6 +57,7 @@ class Operations:
         self.db.store_commit(
             commit_obj.get_hash(),
             tree_obj.get_hash(),
+            None,
             None,
             commit_obj.author,
             commit_obj.message,
@@ -176,12 +178,20 @@ class Operations:
             author=author,
             message=message,
         )
-        commit_hash = commit_obj.get_hash()
+        commit_hash = self._compute_commit_hash(
+            root_tree_hash,
+            parent_hash,
+            None,
+            commit_obj.author,
+            commit_obj.message,
+            commit_obj.timestamp,
+        )
 
         self.db.store_commit(
             commit_hash,
             root_tree_hash,
             parent_hash,
+            None,
             commit_obj.author,
             commit_obj.message,
             commit_obj.timestamp,
@@ -190,6 +200,160 @@ class Operations:
         self.db.clear_staging()
         logger.info("commit_created", hash=commit_hash[:8], message=message)
         return commit_hash
+
+    def merge(
+        self,
+        source_ref: str,
+        author: str | None = None,
+        message: str | None = None,
+    ) -> dict[str, str]:
+        """Merge source branch/ref into the current branch."""
+        if author is None:
+            author = os.getenv("USER", "unknown")
+        target_tip = self.db.get_ref(self.branch)
+        if not target_tip:
+            raise ValueError(f"Current branch '{self.branch}' has no commits")
+
+        source_tip = self._resolve_commit_ref(source_ref)
+        if not source_tip:
+            raise ValueError(f"Source ref '{source_ref}' does not exist")
+
+        if target_tip == source_tip:
+            return {"status": "already-up-to-date", "commit_hash": target_tip}
+
+        target_ancestors = self._collect_ancestors(target_tip)
+        source_ancestors = self._collect_ancestors(source_tip)
+
+        if source_tip in target_ancestors:
+            return {"status": "already-up-to-date", "commit_hash": target_tip}
+
+        if target_tip in source_ancestors:
+            self.db.set_ref(self.branch, source_tip)
+            return {"status": "fast-forward", "commit_hash": source_tip}
+
+        base_hash = self._find_merge_base(target_tip, source_tip)
+        if not base_hash:
+            raise ValueError("Unable to determine merge base")
+
+        merge_result = self._merge_trees(base_hash, target_tip, source_tip)
+        if merge_result["conflicts"]:
+            conflicts = ", ".join(merge_result["conflicts"])
+            raise ValueError(f"Merge conflict detected in: {conflicts}")
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        merge_message = message or f"Merge branch '{source_ref}' into '{self.branch}'"
+        merge_commit_hash = self._compute_commit_hash(
+            merge_result["tree_hash"],
+            target_tip,
+            source_tip,
+            author,
+            merge_message,
+            timestamp,
+        )
+        self.db.store_commit(
+            merge_commit_hash,
+            merge_result["tree_hash"],
+            target_tip,
+            source_tip,
+            author,
+            merge_message,
+            timestamp,
+        )
+        self.db.set_ref(self.branch, merge_commit_hash)
+        return {"status": "merged", "commit_hash": merge_commit_hash}
+
+    def _resolve_commit_ref(self, ref: str) -> str | None:
+        """Resolve branch name or commit hash to a commit hash."""
+        ref_commit = self.db.get_ref(ref)
+        if ref_commit:
+            return ref_commit
+        if len(ref) == 64 and all(c in "0123456789abcdef" for c in ref):
+            return ref if self.db.get_commit(ref) else None
+        return None
+
+    def _collect_ancestors(self, commit_hash: str) -> dict[str, int]:
+        """Return ancestor distance map for a commit."""
+        distances: dict[str, int] = {}
+        queue: list[tuple[str, int]] = [(commit_hash, 0)]
+        while queue:
+            current, depth = queue.pop(0)
+            if current in distances and distances[current] <= depth:
+                continue
+            commit = self.db.get_commit(current)
+            if not commit:
+                continue
+            distances[current] = depth
+            for parent_key in ("parent_hash", "parent_hash2"):
+                parent_hash = commit.get(parent_key)
+                if parent_hash:
+                    queue.append((parent_hash, depth + 1))
+        return distances
+
+    def _find_merge_base(self, target_tip: str, source_tip: str) -> str | None:
+        """Find the nearest common ancestor commit hash."""
+        target_ancestors = self._collect_ancestors(target_tip)
+        source_ancestors = self._collect_ancestors(source_tip)
+        common = set(target_ancestors.keys()) & set(source_ancestors.keys())
+        if not common:
+            return None
+        return min(common, key=lambda h: target_ancestors[h] + source_ancestors[h])
+
+    def _merge_trees(
+        self,
+        base_hash: str,
+        target_tip: str,
+        source_tip: str,
+    ) -> dict[str, Any]:
+        """Perform simplified file-level three-way merge by blob hashes."""
+        base_commit = self.db.get_commit(base_hash)
+        target_commit = self.db.get_commit(target_tip)
+        source_commit = self.db.get_commit(source_tip)
+        if not base_commit or not target_commit or not source_commit:
+            raise ValueError("Missing commits required for merge")
+
+        base_files = self._flatten_tree(base_commit["tree_hash"])
+        target_files = self._flatten_tree(target_commit["tree_hash"])
+        source_files = self._flatten_tree(source_commit["tree_hash"])
+
+        merged_files: dict[str, str] = {}
+        conflicts: list[str] = []
+        all_paths = set(base_files.keys()) | set(target_files.keys()) | set(source_files.keys())
+        for path in sorted(all_paths):
+            base_blob = base_files.get(path)
+            target_blob = target_files.get(path)
+            source_blob = source_files.get(path)
+
+            if target_blob == source_blob:
+                resolved = target_blob
+            elif target_blob == base_blob:
+                resolved = source_blob
+            elif source_blob == base_blob:
+                resolved = target_blob
+            else:
+                conflicts.append(path)
+                continue
+
+            if resolved is not None:
+                merged_files[path] = resolved
+
+        if conflicts:
+            return {"conflicts": conflicts, "tree_hash": ""}
+        return {"conflicts": [], "tree_hash": self._build_tree_from_flat(merged_files)}
+
+    def _compute_commit_hash(
+        self,
+        tree_hash: str,
+        parent_hash: str | None,
+        parent_hash2: str | None,
+        author: str,
+        message: str,
+        timestamp: str,
+    ) -> str:
+        """Compute commit hash from commit payload fields."""
+        parent1 = parent_hash or ""
+        parent2 = parent_hash2 or ""
+        content = f"{tree_hash}{parent1}{parent2}{author}{message}{timestamp}"
+        return sha256(content.encode()).hexdigest()
 
     def _build_tree_from_flat(self, flat_files: dict[str, str]) -> str:
         """Build nested tree objects from a flat {path: blob_hash} dict. Returns root hash."""

@@ -4,6 +4,8 @@ import os
 import shutil
 import tempfile
 
+import pytest
+
 from frontend.operations import Operations
 
 
@@ -253,3 +255,89 @@ class TestOperations:
         ops.create_new_commit("commit", author="Tester")
         staged = ops.db.get_staged()
         assert len(staged) == 0
+
+    def test_merge_missing_source_ref_fails_without_updating_tip(self) -> None:
+        """Merging an unknown source ref raises and leaves branch tip unchanged."""
+        ops = self._init_ops()
+        before = ops.db.get_ref("main")
+        with pytest.raises(ValueError, match="does not exist"):
+            ops.merge("missing-branch")
+        assert ops.db.get_ref("main") == before
+
+    def test_merge_fast_forward_updates_target_tip(self) -> None:
+        """Fast-forward merge updates current branch to source tip without new commit."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        with open(os.path.join(self.tmpdir, "README.md"), "w") as f:
+            f.write("# Feature update\n")
+        ops.add("README.md")
+        feature_tip = ops.create_new_commit("feature change", author="Tester")
+
+        ops.checkout_branch("main")
+        result = ops.merge("feature")
+
+        assert result["status"] == "fast-forward"
+        assert ops.db.get_ref("main") == feature_tip
+        assert result["commit_hash"] == feature_tip
+
+    def test_merge_already_up_to_date_detected(self) -> None:
+        """Merging a branch already contained in target reports no-op."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        with open(os.path.join(self.tmpdir, "README.md"), "w") as f:
+            f.write("# Feature update\n")
+        ops.add("README.md")
+        ops.create_new_commit("feature change", author="Tester")
+        ops.checkout_branch("main")
+        ops.merge("feature")
+
+        result = ops.merge("feature")
+        assert result["status"] == "already-up-to-date"
+        assert result["commit_hash"] == ops.db.get_ref("main")
+
+    def test_merge_diverged_creates_two_parent_commit(self) -> None:
+        """Diverged merge creates a merge commit with two parents."""
+        ops = self._init_ops()
+        base_tip = ops.db.get_ref("main")
+        ops.create_branch("feature")
+        with open(os.path.join(self.tmpdir, "README.md"), "w") as f:
+            f.write("# Feature branch update\n")
+        ops.add("README.md")
+        feature_tip = ops.create_new_commit("feature readme", author="Tester")
+
+        ops.checkout_branch("main")
+        with open(os.path.join(self.tmpdir, "src", "main.py"), "w") as f:
+            f.write("print('main change')\n")
+        ops.add("src/main.py")
+        main_tip = ops.create_new_commit("main update", author="Tester")
+        assert main_tip != feature_tip
+        assert base_tip is not None
+
+        result = ops.merge("feature")
+        assert result["status"] == "merged"
+
+        merge_commit = ops.get_commit(result["commit_hash"])
+        assert merge_commit is not None
+        assert merge_commit["parent_hash"] == main_tip
+        assert merge_commit["parent_hash2"] == feature_tip
+        assert ops.db.get_ref("main") == result["commit_hash"]
+
+    def test_merge_conflict_aborts_and_keeps_tip_unchanged(self) -> None:
+        """Overlapping changes on same path abort merge and preserve target tip."""
+        ops = self._init_ops()
+        ops.create_branch("feature")
+        with open(os.path.join(self.tmpdir, "README.md"), "w") as f:
+            f.write("# Feature version\n")
+        ops.add("README.md")
+        ops.create_new_commit("feature change", author="Tester")
+
+        ops.checkout_branch("main")
+        with open(os.path.join(self.tmpdir, "README.md"), "w") as f:
+            f.write("# Main version\n")
+        ops.add("README.md")
+        ops.create_new_commit("main change", author="Tester")
+        before = ops.db.get_ref("main")
+
+        with pytest.raises(ValueError, match="Merge conflict detected"):
+            ops.merge("feature")
+        assert ops.db.get_ref("main") == before

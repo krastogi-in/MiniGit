@@ -184,6 +184,11 @@ def repo_detail(repo_name: str) -> str:
     """Render the repository detail page with branch info and latest tree."""
     ops = get_ops(repo_name)
     branch = request.args.get("branch", "main")
+    try:
+        ops.checkout_branch(branch)
+    except ValueError:
+        branch = "main"
+        ops.checkout_branch(branch)
     branches = ops.get_all_branches()
     history = ops.get_commit_history(branch)
     latest = history[0] if history else None
@@ -200,6 +205,27 @@ def repo_detail(repo_name: str) -> str:
         latest_commit=latest,
         tree_entries=tree_entries,
     )
+
+
+@app.route("/repo/<repo_name>/merge", methods=["POST"])
+def merge_branch(repo_name: str) -> Any:
+    """Handle merge request from source branch into target branch."""
+    ops = get_ops(repo_name)
+    source_branch = request.form.get("source_branch", "").strip()
+    target_branch = request.form.get("target_branch", "").strip() or "main"
+
+    try:
+        ops.checkout_branch(target_branch)
+        result = ops.merge(source_branch)
+        if result["status"] == "already-up-to-date":
+            flash("Already up to date.", "success")
+        elif result["status"] == "fast-forward":
+            flash(f"Fast-forwarded to {result['commit_hash'][:8]}", "success")
+        else:
+            flash(f"Merge commit created: {result['commit_hash'][:8]}", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("repo_detail", repo_name=repo_name, branch=target_branch))
 
 
 @app.route("/repo/<repo_name>/tree/<tree_hash>")

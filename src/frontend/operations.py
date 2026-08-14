@@ -123,7 +123,7 @@ class Operations:
         full_path = os.path.join(self.repo_path, file_path)
         if not os.path.isfile(full_path):
             raise FileNotFoundError(f"File not found: {file_path}")
-        with open(full_path, "r") as f:
+        with open(full_path) as f:
             content = f.read()
         blob = Blob(content)
         self.db.store_blob(blob.get_hash(), blob.get_data())
@@ -238,6 +238,24 @@ class Operations:
     def get_staged(self) -> list[dict[str, Any]]:
         """Return the list of currently staged file entries."""
         return self.db.get_staged()
+
+    def stash_push(self, message: str | None = None) -> dict[str, Any]:
+        """Push staged changes onto the stash stack. Returns stash metadata."""
+        from frontend.stash import stash_push as _stash_push
+
+        return _stash_push(self, message)
+
+    def stash_list(self) -> list[dict[str, Any]]:
+        """List stash entries newest-first."""
+        from frontend.stash import stash_list as _stash_list
+
+        return _stash_list(self)
+
+    def stash_pop(self) -> dict[str, Any]:
+        """Pop and apply the top stash entry. Raises ValueError on conflict."""
+        from frontend.stash import stash_pop as _stash_pop
+
+        return _stash_pop(self)
 
     def get_working_dir_files(self, subdir: str = "") -> list[dict[str, str]]:
         """List files and directories in the working directory for the UI explorer."""

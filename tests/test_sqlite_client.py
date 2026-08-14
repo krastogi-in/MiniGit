@@ -76,6 +76,21 @@ class TestSQLiteClient:
         self.db.set_ref("main", new)
         assert self.db.get_ref("main") == new
 
+    def test_stash_push_list_delete(self) -> None:
+        """Stash CRUD inserts, lists newest-first, and deletes by id."""
+        sid = self.db.push_stash("2026-01-01T00:00:00Z", "first", "[]")
+        sid2 = self.db.push_stash("2026-01-02T00:00:00Z", "second", "[{}]")
+        assert sid >= 1
+        listed = self.db.list_stashes()
+        assert [r["message"] for r in listed] == ["second", "first"]
+        top = self.db.get_top_stash()
+        assert top is not None
+        assert top["id"] == sid2
+        self.db.delete_stash(sid2)
+        top_after = self.db.get_top_stash()
+        assert top_after is not None
+        assert top_after["message"] == "first"
+
     def test_get_missing_ref(self) -> None:
         """Missing ref returns None."""
         assert self.db.get_ref("nope") is None

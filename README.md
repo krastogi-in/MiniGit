@@ -99,6 +99,12 @@ python src/cli.py show <commit_hash>
 # Diff two commits
 python src/cli.py diff <hash1> <hash2>
 
+# Stash staged changes (push / list / pop)
+python src/cli.py stash
+python src/cli.py stash -m "wip"
+python src/cli.py stash list
+python src/cli.py stash pop
+
 # Start web UI
 python src/cli.py serve
 ```

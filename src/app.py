@@ -13,6 +13,7 @@ import structlog
 sys.path.insert(0, os.path.dirname(__file__))
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
+
 from frontend.operations import Operations
 
 logger = structlog.get_logger(__name__)
@@ -29,7 +30,7 @@ REGISTRY_FILE: str = os.path.join(REPOS_DIR, "repos.json")
 def _load_registry() -> dict[str, str]:
     """Load the repo registry mapping names to absolute paths."""
     if os.path.isfile(REGISTRY_FILE):
-        with open(REGISTRY_FILE, "r") as f:
+        with open(REGISTRY_FILE) as f:
             return json.load(f)
     return {}
 
@@ -308,6 +309,7 @@ def working_dir(repo_name: str) -> str:
     items = ops.get_working_dir_files(subdir)
     staged = ops.get_staged()
     staged_paths = {s["path"] for s in staged}
+    stashes = ops.stash_list()
     return render_template(
         "working_dir.html",
         repo_name=repo_name,
@@ -315,6 +317,7 @@ def working_dir(repo_name: str) -> str:
         items=items,
         staged=staged,
         staged_paths=staged_paths,
+        stashes=stashes,
     )
 
 
@@ -370,6 +373,31 @@ def create_commit(repo_name: str) -> Any:
     except ValueError as e:
         flash(str(e), "error")
     return redirect(url_for("repo_detail", repo_name=repo_name))
+
+
+@app.route("/repo/<repo_name>/stash", methods=["POST"])
+def stash_push(repo_name: str) -> Any:
+    """Stash currently staged changes."""
+    ops = get_ops(repo_name)
+    message = request.form.get("message", "").strip() or None
+    try:
+        meta = ops.stash_push(message=message)
+        flash(f"Stashed: {meta['message']}", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("working_dir", repo_name=repo_name))
+
+
+@app.route("/repo/<repo_name>/stash/pop", methods=["POST"])
+def stash_pop(repo_name: str) -> Any:
+    """Pop the top stash entry back into staging."""
+    ops = get_ops(repo_name)
+    try:
+        meta = ops.stash_pop()
+        flash(f"Popped stash: {meta['message']}", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("working_dir", repo_name=repo_name))
 
 
 if __name__ == "__main__":

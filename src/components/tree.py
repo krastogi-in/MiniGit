@@ -51,7 +51,7 @@ class Tree:
                 if ext.lower() in self.IGNORE_EXTENSIONS:
                     continue
                 try:
-                    with open(full_path, "r") as f:
+                    with open(full_path) as f:
                         self.files[obj] = Blob(f.read())
                 except (UnicodeDecodeError, PermissionError):
                     pass

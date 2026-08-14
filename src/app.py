@@ -185,6 +185,7 @@ def repo_detail(repo_name: str) -> str:
     ops = get_ops(repo_name)
     branch = request.args.get("branch", "main")
     branches = ops.get_all_branches()
+    tags = ops.get_all_tags()
     history = ops.get_commit_history(branch)
     latest = history[0] if history else None
 
@@ -197,6 +198,7 @@ def repo_detail(repo_name: str) -> str:
         repo_name=repo_name,
         branch=branch,
         branches=branches,
+        tags=tags,
         latest_commit=latest,
         tree_entries=tree_entries,
     )
@@ -250,16 +252,24 @@ def commit_history(repo_name: str) -> str:
 
 @app.route("/repo/<repo_name>/commit/<commit_hash>")
 def commit_detail(repo_name: str, commit_hash: str) -> str | Any:
-    """Render commit detail page with metadata and file diffs."""
+    """Render commit detail page with metadata and file diffs.
+
+    *commit_hash* may also be a branch name or tag name.
+    """
     ops = get_ops(repo_name)
-    commit_data = ops.get_commit(commit_hash)
+    try:
+        resolved_hash = ops.resolve_ref(commit_hash)
+    except ValueError:
+        flash("Commit not found", "error")
+        return redirect(url_for("repo_detail", repo_name=repo_name))
+    commit_data = ops.get_commit(resolved_hash)
     if not commit_data:
         flash("Commit not found", "error")
         return redirect(url_for("repo_detail", repo_name=repo_name))
 
     diffs: list[dict[str, Any]] = []
     if commit_data["parent_hash"]:
-        diffs = ops.get_diffs(commit_data["parent_hash"], commit_hash)
+        diffs = ops.get_diffs(commit_data["parent_hash"], resolved_hash)
         for d in diffs:
             d["diff_lines"] = list(difflib.unified_diff(
                 d["old_content"].splitlines(keepends=True),
@@ -295,6 +305,34 @@ def new_branch(repo_name: str) -> Any:
     try:
         ops.create_branch(branch_name)
         flash(f"Branch '{branch_name}' created", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("repo_detail", repo_name=repo_name))
+
+
+@app.route("/repo/<repo_name>/new-tag", methods=["POST"])
+def new_tag(repo_name: str) -> Any:
+    """Handle tag creation form submission."""
+    ops = get_ops(repo_name)
+    tag_name = request.form.get("name", "").strip()
+    ref = request.form.get("ref", "").strip()
+    message = request.form.get("message", "").strip()
+    try:
+        commit_hash = ops.resolve_ref(ref) if ref else None
+        ops.create_tag(tag_name, commit_hash=commit_hash, message=message or None)
+        flash(f"Tag '{tag_name}' created", "success")
+    except ValueError as e:
+        flash(str(e), "error")
+    return redirect(url_for("repo_detail", repo_name=repo_name))
+
+
+@app.route("/repo/<repo_name>/tag/<tag_name>/delete", methods=["POST"])
+def delete_tag(repo_name: str, tag_name: str) -> Any:
+    """Handle tag deletion form submission."""
+    ops = get_ops(repo_name)
+    try:
+        ops.delete_tag(tag_name)
+        flash(f"Tag '{tag_name}' deleted", "success")
     except ValueError as e:
         flash(str(e), "error")
     return redirect(url_for("repo_detail", repo_name=repo_name))
